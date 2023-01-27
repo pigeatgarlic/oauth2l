@@ -75,9 +75,8 @@ type TaskSettings struct {
 
 // Fetches and prints the token in plain text with the given settings
 // using Google Authenticator.
-func Fetch(settings *Settings, taskSettings *TaskSettings) {
-	token := fetchToken(settings, taskSettings)
-	printToken(token, taskSettings.Format, settings)
+func Fetch(settings *Settings, taskSettings *TaskSettings)*oauth2.Token {
+	return fetchToken(settings, taskSettings)
 }
 
 // Fetches and prints the token in header format with the given settings
@@ -227,47 +226,7 @@ func getCredentialType(creds *google.Credentials) string {
 	return ""
 }
 
-// Prints the token with the specified format.
-func printToken(token *oauth2.Token, format string, settings *Settings) {
-	if token != nil {
-		switch format {
-		case formatBare:
-			fmt.Println(token.AccessToken)
-		case formatHeader:
-			printHeader(token.TokenType, token.AccessToken)
-		case formatJson:
-			printJson(token, "  ")
-		case formatJsonCompact:
-			printJson(token, "")
-		case formatPretty:
-			creds, err := FindJSONCredentials(context.Background(), settings)
-			if err != nil {
-				log.Fatal(err.Error())
-			}
-			fmt.Printf("Fetched credentials of type:\n  %s\n"+
-				"Access Token:\n  %s\n",
-				getCredentialType(creds), token.AccessToken)
-		case formatRefreshToken:
-			creds, err := FindJSONCredentials(context.Background(), settings)
-			if err != nil {
-				log.Fatal(err.Error())
-			}
-			credsType := getCredentialType(creds)
-			if credsType == serviceAccountKey {
-				log.Fatalf("Refresh token output format is not supported for Service Account credentials type")
-			}
-			if credsType == externalAccountKey {
-				log.Fatalf("Refresh token output format is not supported for External Account credentials type")
-			}
-			if credsType == userCredentialsKey {
-				fmt.Print(string(creds.JSON)) // The input credential is already in refresh token format.
-			}
-			fmt.Println(BuildRefreshTokenJSON(token.RefreshToken, creds))
-		default:
-			log.Fatalf("Invalid output_format: '%s'", format)
-		}
-	}
-}
+
 
 func printHeader(tokenType string, token string) {
 	fmt.Println(BuildHeader(tokenType, token))

@@ -20,3 +20,5 @@ reduced.pylintrc
 
 # GoLand
 .idea/
+*.exe
+secret

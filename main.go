@@ -17,13 +17,13 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"os"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/google/oauth2l/util"
 	"github.com/jessevdk/go-flags"
+	"golang.org/x/oauth2"
 )
 
 const (
@@ -156,7 +156,6 @@ func parseScopes(scopes []string) string {
 // Overrides default cache location if configured.
 func setCacheLocation(cache *string) {
 	if cache != nil {
-		util.CacheLocation = *cache
 	}
 }
 
@@ -234,221 +233,108 @@ func getScopesWithFallback(scope string, remainingArgs ...string) []string {
 	return scopes
 }
 
-// Extracts the info options based on chosen command.
-func getInfoOptions(cmdOpts commandOptions, cmd string) infoOptions {
-	var infoOpts infoOptions
-	switch cmd {
-	case "info":
-		infoOpts = cmdOpts.Info
-	case "test":
-		infoOpts = cmdOpts.Test
+
+func startAuth() (*oauth2.Token,error) {
+
+	parser := flags.NewParser(&opts, flags.Default)
+	util.CacheLocation = "./cache"
+	remainingArgs,_ := parser.ParseArgs([]string{"fetch","--scope","cloud-platform","--credentials","./secret"})
+	commonOpts := getCommonFetchOptions(opts, "fetch")
+	authType := getAuthTypeWithFallback(commonOpts)
+	credentials := getCredentialsWithFallback(commonOpts)
+	scope := commonOpts.Scope
+	audience := commonOpts.Audience
+	quotaProject := commonOpts.QuotaProject
+	sts := commonOpts.Sts
+	serviceAccount := commonOpts.ServiceAccount
+	email := commonOpts.Email
+	ssocli := commonOpts.SsoCli
+	refresh := commonOpts.Refresh
+	format := getOutputFormatWithFallback(opts.Fetch)
+	curlcli := opts.Curl.CurlCli
+	url := opts.Curl.Url
+
+	taskSettings := &util.TaskSettings{
+		AuthType:  authType,
+		Format:    format,
+		CurlCli:   curlcli,
+		Url:       url,
+		ExtraArgs: remainingArgs,
+		SsoCli:    ssocli,
+		Refresh:   refresh,
 	}
-	return infoOpts
-}
+
+	// Configure GUAC settings based on authType.
+	var settings *util.Settings
+	{
+		// OAuth flow
+		scopes := getScopesWithFallback(scope, remainingArgs...)
+		if len(scopes) < 1 {
+			return nil, fmt.Errorf("Missing scope argument for OAuth 2.0")
+		}
+
+		json, err := readJSON(credentials)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to open file: " + credentials)
+		}
+
+		var authCodeServer util.AuthorizationCodeServer = nil
+		var consentPageSettings util.ConsentPageSettings
+		redirectUri, err := util.GetFirstRedirectURI(json)
+		// 3LO Loopback case
+		if err == nil && strings.Contains(redirectUri, "localhost") {
+			interactionTimeout, err := getTimeDuration(commonOpts.ConsentPageInteractionTimeout, commonOpts.ConsentPageInteractionTimeoutUnits)
+			if err != nil {
+				return nil, fmt.Errorf("Failed to create time.Duration: " + err.Error())
+			}
+			consentPageSettings = util.ConsentPageSettings{
+				DisableAutoOpenConsentPage: commonOpts.DisableAutoOpenConsentPage,
+				InteractionTimeout:         interactionTimeout,
+			}
+			authCodeServer = &util.AuthorizationCodeLocalhost{
+				ConsentPageSettings: consentPageSettings,
+				AuthCodeReqStatus: util.AuthorizationCodeStatus{
+					Status: util.WAITING, Details: "Authorization code not yet set."},
+			}
+
+			// Start localhost server
+			adr, err := authCodeServer.ListenAndServe(redirectUri)
+			if err != nil {
+				return nil, err
+			}
+			// Close localhost server's port on exit
+			defer authCodeServer.Close()
+
+			// If a different dynamic redirect uri was created, replace the redirect uri in file.
+			// this happens if the original redirect does not have a port for the localhost.
+			redirectUri = fmt.Sprintf("\"%s\"", redirectUri)
+			adr = fmt.Sprintf("\"%s\"", adr)
+			json = strings.Replace(json, redirectUri, adr, -1)
+		}
+
+		// 3LO or 2LO depending on the credential type.
+		// For 2LO flow AuthHandler, State and ConsentPageSettings are not needed.
+		settings = &util.Settings{
+			CredentialsJSON: json,
+			Scope:           parseScopes(scopes),
+			AuthHandler:     util.Get3LOAuthorizationHandler(defaultState, consentPageSettings, &authCodeServer),
+			State:           defaultState,
+			Audience:        audience,
+			QuotaProject:    quotaProject,
+			Sts:             sts,
+			ServiceAccount:  serviceAccount,
+			Email:           email,
+			AuthType:        util.AuthTypeOAuth,
+		}
+	}
+
+	return util.Fetch(settings, taskSettings),nil
+} 
+
+
+
 
 func main() {
-	// Parse command-line flags via "go-flags" library
-	parser := flags.NewParser(&opts, flags.Default)
-
-	// Arguments that are not recognized by the parser are stored in remainingArgs.
-	remainingArgs, err := parser.Parse()
-	if err != nil {
-		os.Exit(0)
-	}
-
-	// Get the name of the selected command
-	cmd := parser.Active.Name
-
-	// Tasks that fetch the access token.
-	fetchTasks := map[string]func(*util.Settings, *util.TaskSettings){
-		"fetch":  util.Fetch,
-		"header": util.Header,
-		"curl":   util.Curl,
-	}
-
-	// Tasks that verify the existing token.
-	infoTasks := map[string](func(string) int){
-		"info": util.Info,
-		"test": util.Test,
-	}
-
-	if task, ok := fetchTasks[cmd]; ok {
-		commonOpts := getCommonFetchOptions(opts, cmd)
-		authType := getAuthTypeWithFallback(commonOpts)
-		credentials := getCredentialsWithFallback(commonOpts)
-		scope := commonOpts.Scope
-		audience := commonOpts.Audience
-		quotaProject := commonOpts.QuotaProject
-		sts := commonOpts.Sts
-		serviceAccount := commonOpts.ServiceAccount
-		email := commonOpts.Email
-		ssocli := commonOpts.SsoCli
-		setCacheLocation(commonOpts.Cache)
-		refresh := commonOpts.Refresh
-		format := getOutputFormatWithFallback(opts.Fetch)
-		curlcli := opts.Curl.CurlCli
-		url := opts.Curl.Url
-
-		taskSettings := &util.TaskSettings{
-			AuthType:  authType,
-			Format:    format,
-			CurlCli:   curlcli,
-			Url:       url,
-			ExtraArgs: remainingArgs,
-			SsoCli:    ssocli,
-			Refresh:   refresh,
-		}
-
-		// Configure GUAC settings based on authType.
-		var settings *util.Settings
-		if authType == util.AuthTypeJWT {
-			json, err := readJSON(credentials)
-			if err != nil {
-				fmt.Println("Failed to open file: " + credentials)
-				fmt.Println(err.Error())
-				return
-			}
-
-			// Fallback to reading audience from first remaining arg
-			if audience == "" {
-				if len(remainingArgs) > 0 {
-					audience = remainingArgs[0]
-				}
-			}
-
-			scopes := getScopesWithFallback(scope, remainingArgs...)
-			if audience == "" && len(scopes) < 1 {
-				fmt.Println("Neither audience nor scope argument is provided for JWT")
-				return
-			}
-
-			settings = &util.Settings{
-				AuthType:        util.AuthTypeJWT,
-				CredentialsJSON: json,
-				Audience:        audience,
-				Scope:           parseScopes(scopes),
-			}
-		} else if authType == util.AuthTypeSSO {
-			// Fallback to reading email from first remaining arg
-			argProcessedIndex := 0
-			if email == "" {
-				if len(remainingArgs) > 0 {
-					email = remainingArgs[argProcessedIndex]
-					argProcessedIndex++
-				} else {
-					fmt.Println("Missing email argument for SSO")
-					return
-				}
-			}
-
-			scopes := getScopesWithFallback(scope, remainingArgs[argProcessedIndex:]...)
-			if len(scopes) < 1 {
-				fmt.Println("Missing scope argument for SSO")
-				return
-			}
-
-			// SSO flow does not use CredentialsJSON
-			settings = &util.Settings{
-				Email:          email,
-				Scope:          parseScopes(scopes),
-				Audience:       audience,
-				QuotaProject:   quotaProject,
-				Sts:            sts,
-				ServiceAccount: serviceAccount,
-			}
-		} else {
-			// OAuth flow
-			scopes := getScopesWithFallback(scope, remainingArgs...)
-			if len(scopes) < 1 {
-				fmt.Println("Missing scope argument for OAuth 2.0")
-				return
-			}
-
-			json, err := readJSON(credentials)
-			if err != nil {
-				fmt.Println("Failed to open file: " + credentials)
-				fmt.Println(err.Error())
-				return
-			}
-
-			var authCodeServer util.AuthorizationCodeServer = nil
-			var consentPageSettings util.ConsentPageSettings
-			redirectUri, err := util.GetFirstRedirectURI(json)
-			// 3LO Loopback case
-			if err == nil && strings.Contains(redirectUri, "localhost") {
-				interactionTimeout, err := getTimeDuration(commonOpts.ConsentPageInteractionTimeout, commonOpts.ConsentPageInteractionTimeoutUnits)
-				if err != nil {
-					fmt.Println("Failed to create time.Duration: " + err.Error())
-					return
-				}
-				consentPageSettings = util.ConsentPageSettings{
-					DisableAutoOpenConsentPage: commonOpts.DisableAutoOpenConsentPage,
-					InteractionTimeout:         interactionTimeout,
-				}
-				authCodeServer = &util.AuthorizationCodeLocalhost{
-					ConsentPageSettings: consentPageSettings,
-					AuthCodeReqStatus: util.AuthorizationCodeStatus{
-						Status: util.WAITING, Details: "Authorization code not yet set."},
-				}
-
-				// Start localhost server
-				adr, err := authCodeServer.ListenAndServe(redirectUri)
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
-				// Close localhost server's port on exit
-				defer authCodeServer.Close()
-
-				// If a different dynamic redirect uri was created, replace the redirect uri in file.
-				// this happens if the original redirect does not have a port for the localhost.
-				redirectUri = fmt.Sprintf("\"%s\"", redirectUri)
-				adr = fmt.Sprintf("\"%s\"", adr)
-				json = strings.Replace(json, redirectUri, adr, -1)
-			}
-
-			// 3LO or 2LO depending on the credential type.
-			// For 2LO flow AuthHandler, State and ConsentPageSettings are not needed.
-			settings = &util.Settings{
-				CredentialsJSON: json,
-				Scope:           parseScopes(scopes),
-				AuthHandler:     util.Get3LOAuthorizationHandler(defaultState, consentPageSettings, &authCodeServer),
-				State:           defaultState,
-				Audience:        audience,
-				QuotaProject:    quotaProject,
-				Sts:             sts,
-				ServiceAccount:  serviceAccount,
-				Email:           email,
-				AuthType:        util.AuthTypeOAuth,
-			}
-		}
-
-		task(settings, taskSettings)
-	} else if task, ok := infoTasks[cmd]; ok {
-		infoOpts := getInfoOptions(opts, cmd)
-		token := infoOpts.Token
-
-		// Fallback to reading token from remaining args.
-		if token == "" {
-			if len(remainingArgs) > 0 {
-				token = remainingArgs[0]
-			} else {
-				fmt.Println("Missing token to analyze")
-				return
-			}
-		}
-
-		os.Exit(task(token))
-	} else if cmd == "web" {
-		setWebDirectory(opts.Web.Directory)
-		if opts.Web.Stop {
-			util.WebStop()
-		} else {
-			util.Web()
-		}
-
-	} else if cmd == "reset" {
-		setCacheLocation(opts.Reset.Cache)
-		util.Reset()
-	}
+	token,_ := startAuth()
+	fmt.Printf("%s",token.AccessToken)
 }

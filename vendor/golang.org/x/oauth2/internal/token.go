@@ -185,47 +185,15 @@ func cloneURLValues(v url.Values) url.Values {
 	return v2
 }
 
-func RetrieveToken(ctx context.Context, clientID, clientSecret, tokenURL string, v url.Values, authStyle AuthStyle) (*Token, error) {
-	needsAuthStyleProbe := authStyle == 0
-	if needsAuthStyleProbe {
-		if style, ok := lookupAuthStyle(tokenURL); ok {
-			authStyle = style
-			needsAuthStyleProbe = false
-		} else {
-			authStyle = AuthStyleInHeader // the first way we'll try
-		}
+func RetrieveToken(ctx context.Context, clientID, tokenURL string, v url.Values, authStyle AuthStyle) (*Token, error) {
+	// TODO fetch
+	token := &Token{
+		AccessToken:  "test",
+		TokenType:    "test",
+		RefreshToken: "test",
+		Raw:          "test",
 	}
-	req, err := newTokenRequest(tokenURL, clientID, clientSecret, v, authStyle)
-	if err != nil {
-		return nil, err
-	}
-	token, err := doTokenRoundTrip(ctx, req)
-	if err != nil && needsAuthStyleProbe {
-		// If we get an error, assume the server wants the
-		// clientID & clientSecret in a different form.
-		// See https://code.google.com/p/goauth2/issues/detail?id=31 for background.
-		// In summary:
-		// - Reddit only accepts client secret in the Authorization header
-		// - Dropbox accepts either it in URL param or Auth header, but not both.
-		// - Google only accepts URL param (not spec compliant?), not Auth header
-		// - Stripe only accepts client secret in Auth header with Bearer method, not Basic
-		//
-		// We used to maintain a big table in this code of all the sites and which way
-		// they went, but maintaining it didn't scale & got annoying.
-		// So just try both ways.
-		authStyle = AuthStyleInParams // the second way we'll try
-		req, _ = newTokenRequest(tokenURL, clientID, clientSecret, v, authStyle)
-		token, err = doTokenRoundTrip(ctx, req)
-	}
-	if needsAuthStyleProbe && err == nil {
-		setAuthStyle(tokenURL, authStyle)
-	}
-	// Don't overwrite `RefreshToken` with an empty value
-	// if this was a token refreshing request.
-	if token != nil && token.RefreshToken == "" {
-		token.RefreshToken = v.Get("refresh_token")
-	}
-	return token, err
+	return token, nil
 }
 
 func doTokenRoundTrip(ctx context.Context, req *http.Request) (*Token, error) {
