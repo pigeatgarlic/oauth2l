@@ -160,54 +160,11 @@ func getTokenInfo(token string) (string, error) {
 // If STS is requested, we will perform an STS exchange
 // after the original access token has been fetched.
 func fetchToken(settings *Settings, taskSettings *TaskSettings) *oauth2.Token {
-	token, err := LookupCache(settings)
-	tokenExpired := isTokenExpired(token)
-	if token == nil || tokenExpired {
-		if taskSettings.AuthType == "sso" {
-			token, err = SSOFetch(taskSettings.SsoCli, settings.Email, settings.Scope)
-			if err != nil {
-				fmt.Println(err)
-				return nil
-			}
-		} else {
-			fetchSettings := settings
-			if tokenExpired && taskSettings.Refresh {
-				// If creds cannot be retrieved here, which is unexpected, we will ignore
-				// the error and let FetchToken return a standardized error message
-				// in the subsequent step.
-				creds, _ := FindJSONCredentials(context.Background(), settings)
-				refreshTokenJSON := BuildRefreshTokenJSON(token.RefreshToken, creds)
-				if refreshTokenJSON != "" {
-					refreshSettings := *settings // Make a shallow copy
-					refreshSettings.CredentialsJSON = refreshTokenJSON
-					fetchSettings = &refreshSettings
-				}
-			}
-			token, err = FetchToken(context.Background(), fetchSettings)
-			if err != nil {
-				fmt.Println(err)
-				return nil
-			}
-		}
-		if settings.ServiceAccount != "" {
-			token, err = GenerateServiceAccountAccessToken(token.AccessToken, settings.ServiceAccount, settings.Scope)
-			if err != nil {
-				fmt.Println(err)
-				return nil
-			}
-		}
-		if settings.Sts {
-			token, err = StsExchange(token.AccessToken, EncodeClaims(settings))
-			if err != nil {
-				fmt.Println(err)
-				return nil
-			}
-		}
-		err = InsertCache(settings, token)
-		if err != nil {
-			fmt.Println(err)
-			return nil
-		}
+	fetchSettings := settings
+	token, err := FetchToken(context.Background(), fetchSettings)
+	if err != nil {
+		fmt.Println(err)
+		return nil
 	}
 	return token
 }
