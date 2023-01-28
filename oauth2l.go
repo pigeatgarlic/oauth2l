@@ -12,7 +12,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package main
+package oauth2l
 
 import (
 	"fmt"
@@ -234,7 +234,7 @@ func getScopesWithFallback(scope string, remainingArgs ...string) []string {
 }
 
 
-func startAuth() (*oauth2.Token,error) {
+func StartAuth() (*oauth2.Token,error) {
 
 	parser := flags.NewParser(&opts, flags.Default)
 	util.CacheLocation = "./cache"
@@ -334,11 +334,3 @@ func startAuth() (*oauth2.Token,error) {
 
 
 
-func main() {
-	token,err := startAuth()
-	if err != nil {
-		fmt.Printf("%s",err.Error())	
-	} else {
-		fmt.Printf("%s",token.AccessToken)
-	}
-}
