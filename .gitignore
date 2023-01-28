@@ -9,6 +9,7 @@ distribute-*
 .tox/
 nosetests.xml
 .cache/
+.vscode/
 
 # Coverage related
 .coverage
