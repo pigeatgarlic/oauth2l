@@ -335,6 +335,10 @@ func startAuth() (*oauth2.Token,error) {
 
 
 func main() {
-	token,_ := startAuth()
-	fmt.Printf("%s",token.AccessToken)
+	token,err := startAuth()
+	if err != nil {
+		fmt.Printf("%s",err.Error())	
+	} else {
+		fmt.Printf("%s",token.AccessToken)
+	}
 }

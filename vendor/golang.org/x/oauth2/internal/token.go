@@ -187,8 +187,28 @@ func cloneURLValues(v url.Values) url.Values {
 
 func RetrieveToken(ctx context.Context, clientID, tokenURL string, v url.Values, authStyle AuthStyle) (*Token, error) {
 	// TODO fetch
+
+	v.Set("client_id", clientID)
+	v.Set("client_secret","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")
+	req,_ := http.NewRequest("POST", tokenURL, strings.NewReader(v.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r, err := ctxhttp.Do(ctx, ContextClient(ctx), req)
+	if err != nil {
+		return nil, err
+	}
+	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 1<<20))
+	r,err = ctxhttp.Do(ctx, ContextClient(ctx), req)
+	if err != nil {
+		return nil, err
+	}
+	r.Body.Close()
+
+
+	
+
+
 	token := &Token{
-		AccessToken:  "test",
+		AccessToken:  string(body),
 		TokenType:    "test",
 		RefreshToken: "test",
 		Raw:          "test",
