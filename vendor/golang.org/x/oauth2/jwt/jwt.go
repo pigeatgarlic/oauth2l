@@ -98,7 +98,7 @@ type jwtSource struct {
 	conf *Config
 }
 
-func (js jwtSource) Token() (*oauth2.Token, error) {
+func (js jwtSource) Token() (*oauth2.Account, error) {
 	pk, err := internal.ParseKey(js.conf.PrivateKey)
 	if err != nil {
 		return nil, err
@@ -156,7 +156,7 @@ func (js jwtSource) Token() (*oauth2.Token, error) {
 	if err := json.Unmarshal(body, &tokenRes); err != nil {
 		return nil, fmt.Errorf("oauth2: cannot fetch token: %v", err)
 	}
-	token := &oauth2.Token{
+	token := &oauth2.Account{
 		AccessToken: tokenRes.AccessToken,
 		TokenType:   tokenRes.TokenType,
 	}

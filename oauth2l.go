@@ -233,15 +233,15 @@ func getScopesWithFallback(scope string, remainingArgs ...string) []string {
 	return scopes
 }
 
-
-func StartAuth() (*oauth2.Token,error) {
+func StartAuth(authdata interface{}) (*oauth2.Account, error) {
 
 	parser := flags.NewParser(&opts, flags.Default)
 	util.CacheLocation = "./cache"
-	remainingArgs,_ := parser.ParseArgs([]string{"fetch","--scope","cloud-platform","--credentials","./secret"})
+	remainingArgs, _ := parser.ParseArgs([]string{"fetch", "--scope", "profile email openid", "--credentials", "./secret"})
 	commonOpts := getCommonFetchOptions(opts, "fetch")
 	authType := getAuthTypeWithFallback(commonOpts)
 	credentials := getCredentialsWithFallback(commonOpts)
+
 	scope := commonOpts.Scope
 	audience := commonOpts.Audience
 	quotaProject := commonOpts.QuotaProject
@@ -262,6 +262,8 @@ func StartAuth() (*oauth2.Token,error) {
 		ExtraArgs: remainingArgs,
 		SsoCli:    ssocli,
 		Refresh:   refresh,
+
+		Authdata: authdata,
 	}
 
 	// Configure GUAC settings based on authType.
@@ -328,9 +330,5 @@ func StartAuth() (*oauth2.Token,error) {
 		}
 	}
 
-	return util.Fetch(settings, taskSettings),nil
-} 
-
-
-
-
+	return util.Fetch(settings, taskSettings), nil
+}

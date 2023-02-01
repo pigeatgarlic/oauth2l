@@ -36,13 +36,12 @@ func BuildRefreshTokenJSON(refreshToken string, creds *google.Credentials) strin
 	if refreshToken == "" {
 		return ""
 	}
-	oauth2Config, err := google.ConfigFromJSON(creds.JSON)
+	oauth2Config, err := google.ConfigFromJSON(nil,creds.JSON)
 	if err != nil {
 		return ""
 	}
 	var refreshCredentials refreshCredentialsJSON
 	refreshCredentials.ClientID = oauth2Config.ClientID
-	refreshCredentials.ClientSecret = oauth2Config.ClientSecret
 	refreshCredentials.TokenURL = oauth2Config.Endpoint.TokenURL
 	refreshCredentials.AuthURL = oauth2Config.Endpoint.AuthURL
 	refreshCredentials.RefreshToken = refreshToken

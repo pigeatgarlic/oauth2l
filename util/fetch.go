@@ -31,9 +31,7 @@ var DefaultScope = "https://www.googleapis.com/auth/cloud-platform"
 func newTokenSource(ctx context.Context, settings *Settings) (*oauth2.TokenSource, error) {
 	var ts oauth2.TokenSource
 	var err error
-	if settings == nil {
-		ts, err = google.DefaultTokenSource(ctx, DefaultScope)
-	} else if settings.GetAuthType() == AuthTypeAPIKey {
+	if settings.GetAuthType() == AuthTypeAPIKey {
 		return nil, nil
 	} else if settings.GetAuthType() == AuthTypeOAuth {
 		ts, err = OAuthJSONTokenSource(ctx, settings)
@@ -50,7 +48,7 @@ func newTokenSource(ctx context.Context, settings *Settings) (*oauth2.TokenSourc
 
 // Returns a token from the given settings.
 // Returns nil for API keys.
-func FetchToken(ctx context.Context, settings *Settings) (*oauth2.Token, error) {
+func FetchToken(ctx context.Context, settings *Settings) (*oauth2.Account, error) {
 	if settings.APIKey != "" {
 		return nil, nil
 	}
@@ -98,11 +96,12 @@ func FindJSONCredentials(ctx context.Context, settings *Settings) (*google.Crede
 	params.Subject = settings.Email
 	params.PKCE = GeneratePKCEParams()
 	if settings.CredentialsJSON != "" {
-		return google.CredentialsFromJSONWithParams(ctx, []byte(settings.CredentialsJSON),
+		return google.CredentialsFromJSONWithParams(settings.Authdata,ctx, []byte(settings.CredentialsJSON),
 			params)
 
 	} else {
-		return google.FindDefaultCredentialsWithParams(ctx, params)
+		return nil, fmt.Errorf("no credential file");
+		// return google.FindDefaultCredentialsWithParams(ctx, params)
 
 	}
 }

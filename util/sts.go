@@ -39,7 +39,7 @@ type tokenJSON struct {
 }
 
 // Exchanges an OAuth Access Token to an Sts token with base64 encoded claims
-func StsExchange(accessToken string, encodedClaims string) (*oauth2.Token, error) {
+func StsExchange(accessToken string, encodedClaims string) (*oauth2.Account, error) {
 	v := url.Values{
 		"grant_type":           {"urn:ietf:params:oauth:grant-type:token-exchange"},
 		"subject_token_type":   {"urn:ietf:params:oauth:token-type:access_token"},
@@ -71,7 +71,7 @@ func StsExchange(accessToken string, encodedClaims string) (*oauth2.Token, error
 	if err = json.Unmarshal(body, &tj); err != nil {
 		return nil, err
 	}
-	token := oauth2.Token{}
+	token := oauth2.Account{}
 	token.AccessToken = tj.AccessToken
 	token.TokenType = tj.TokenType
 	var raw map[string]interface{}

@@ -42,9 +42,6 @@ type Config struct {
 	// ClientID is the application's ID.
 	ClientID string
 
-	// ClientSecret is the application's secret.
-	ClientSecret string
-
 	// Endpoint contains the resource server's token endpoint
 	// URLs. These are constants specific to each server and are
 	// often available via site-specific packages, such as
@@ -57,6 +54,12 @@ type Config struct {
 
 	// Scope specifies optional requested permissions.
 	Scopes []string
+
+	ExchangeAPI string
+
+	AnonToken string
+	
+	Authdata interface{}
 }
 
 // A TokenSource is anything that can return a token.
@@ -64,7 +67,7 @@ type TokenSource interface {
 	// Token returns a token or an error.
 	// Token must be safe for concurrent use by multiple goroutines.
 	// The returned Token must not be modified.
-	Token() (*Token, error)
+	Token() (*Account, error)
 }
 
 // Endpoint represents an OAuth 2.0 provider's authorization and token
@@ -176,27 +179,7 @@ func (c *Config) AuthCodeURL(state string, opts ...AuthCodeOption) string {
 	return buf.String()
 }
 
-// PasswordCredentialsToken converts a resource owner username and password
-// pair into a token.
-//
-// Per the RFC, this grant type should only be used "when there is a high
-// degree of trust between the resource owner and the client (e.g., the client
-// is part of the device operating system or a highly privileged application),
-// and when other authorization grant types are not available."
-// See https://tools.ietf.org/html/rfc6749#section-4.3 for more info.
-//
-// The provided context optionally controls which HTTP client is used. See the HTTPClient variable.
-func (c *Config) PasswordCredentialsToken(ctx context.Context, username, password string) (*Token, error) {
-	v := url.Values{
-		"grant_type": {"password"},
-		"username":   {username},
-		"password":   {password},
-	}
-	if len(c.Scopes) > 0 {
-		v.Set("scope", strings.Join(c.Scopes, " "))
-	}
-	return retrieveToken(ctx, c, v)
-}
+
 
 // Exchange converts an authorization code into a token.
 //
@@ -210,7 +193,7 @@ func (c *Config) PasswordCredentialsToken(ctx context.Context, username, passwor
 //
 // Opts may include the PKCE verifier code if previously used in AuthCodeURL.
 // See https://www.oauth.com/oauth2-servers/pkce/ for more info.
-func (c *Config) Exchange(ctx context.Context, code string, opts ...AuthCodeOption) (*Token, error) {
+func (c *Config) Exchange(ctx context.Context, authdata interface{}, code string, opts ...AuthCodeOption) (*Account, error) {
 	v := url.Values{
 		"grant_type": {"authorization_code"},
 		"code":       {code},
@@ -221,14 +204,14 @@ func (c *Config) Exchange(ctx context.Context, code string, opts ...AuthCodeOpti
 	for _, opt := range opts {
 		opt.setValue(v)
 	}
-	return retrieveToken(ctx, c, v)
+	return retrieveToken(ctx,authdata, c, v)
 }
 
 // Client returns an HTTP client using the provided token.
 // The token will auto-refresh as necessary. The underlying
 // HTTP transport will be obtained using the provided context.
 // The returned client and its Transport should not be modified.
-func (c *Config) Client(ctx context.Context, t *Token) *http.Client {
+func (c *Config) Client(ctx context.Context, t *Account) *http.Client {
 	return NewClient(ctx, c.TokenSource(ctx, t))
 }
 
@@ -236,7 +219,7 @@ func (c *Config) Client(ctx context.Context, t *Token) *http.Client {
 // automatically refreshing it as necessary using the provided context.
 //
 // Most users will use Config.Client instead.
-func (c *Config) TokenSource(ctx context.Context, t *Token) TokenSource {
+func (c *Config) TokenSource(ctx context.Context, t *Account) TokenSource {
 	tkr := &tokenRefresher{
 		ctx:  ctx,
 		conf: c,
@@ -262,12 +245,12 @@ type tokenRefresher struct {
 // updates the tokenRefresher's refreshToken field.
 // Within this package, it is used by reuseTokenSource which
 // synchronizes calls to this method with its own mutex.
-func (tf *tokenRefresher) Token() (*Token, error) {
+func (tf *tokenRefresher) Token() (*Account, error) {
 	if tf.refreshToken == "" {
 		return nil, errors.New("oauth2: token expired and refresh token is not set")
 	}
 
-	tk, err := retrieveToken(tf.ctx, tf.conf, url.Values{
+	tk, err := retrieveToken(tf.ctx, tf.conf.Authdata, tf.conf, url.Values{
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {tf.refreshToken},
 	})
@@ -289,13 +272,13 @@ type reuseTokenSource struct {
 	new TokenSource // called when t is expired.
 
 	mu sync.Mutex // guards t
-	t  *Token
+	t  *Account
 }
 
 // Token returns the current token if it's still valid, else will
 // refresh the current token (using r.Context for HTTP client
 // information) and return the new one.
-func (s *reuseTokenSource) Token() (*Token, error) {
+func (s *reuseTokenSource) Token() (*Account, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.t.Valid() {
@@ -312,16 +295,16 @@ func (s *reuseTokenSource) Token() (*Token, error) {
 // StaticTokenSource returns a TokenSource that always returns the same token.
 // Because the provided token t is never refreshed, StaticTokenSource is only
 // useful for tokens that never expire.
-func StaticTokenSource(t *Token) TokenSource {
+func StaticTokenSource(t *Account) TokenSource {
 	return staticTokenSource{t}
 }
 
 // staticTokenSource is a TokenSource that always returns the same Token.
 type staticTokenSource struct {
-	t *Token
+	t *Account
 }
 
-func (s staticTokenSource) Token() (*Token, error) {
+func (s staticTokenSource) Token() (*Account, error) {
 	return s.t, nil
 }
 
@@ -363,7 +346,7 @@ func NewClient(ctx context.Context, src TokenSource) *http.Client {
 // wrapped in a caching version if it isn't one already. This also
 // means it's always safe to wrap ReuseTokenSource around any other
 // TokenSource without adverse effects.
-func ReuseTokenSource(t *Token, src TokenSource) TokenSource {
+func ReuseTokenSource(t *Account, src TokenSource) TokenSource {
 	// Don't wrap a reuseTokenSource in itself. That would work,
 	// but cause an unnecessary number of mutex operations.
 	// Just build the equivalent one.

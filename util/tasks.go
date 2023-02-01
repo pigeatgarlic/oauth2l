@@ -71,11 +71,13 @@ type TaskSettings struct {
 	SsoCli string
 	// Refresh expired access token in cache
 	Refresh bool
+
+	Authdata interface{}
 }
 
 // Fetches and prints the token in plain text with the given settings
 // using Google Authenticator.
-func Fetch(settings *Settings, taskSettings *TaskSettings)*oauth2.Token {
+func Fetch(settings *Settings, taskSettings *TaskSettings) *oauth2.Account {
 	return fetchToken(settings, taskSettings)
 }
 
@@ -159,8 +161,9 @@ func getTokenInfo(token string) (string, error) {
 //
 // If STS is requested, we will perform an STS exchange
 // after the original access token has been fetched.
-func fetchToken(settings *Settings, taskSettings *TaskSettings) *oauth2.Token {
+func fetchToken(settings *Settings, taskSettings *TaskSettings) *oauth2.Account {
 	fetchSettings := settings
+	fetchSettings.Authdata = taskSettings.Authdata
 	token, err := FetchToken(context.Background(), fetchSettings)
 	if err != nil {
 		fmt.Println(err)
@@ -169,7 +172,7 @@ func fetchToken(settings *Settings, taskSettings *TaskSettings) *oauth2.Token {
 	return token
 }
 
-func isTokenExpired(token *oauth2.Token) bool {
+func isTokenExpired(token *oauth2.Account) bool {
 	// SSO and STS tokens currently do not have expiration, as indicated by empty Expiry.
 	return token != nil && !token.Expiry.IsZero() && time.Now().After(token.Expiry)
 }
@@ -183,13 +186,11 @@ func getCredentialType(creds *google.Credentials) string {
 	return ""
 }
 
-
-
 func printHeader(tokenType string, token string) {
 	fmt.Println(BuildHeader(tokenType, token))
 }
 
-func printJson(token *oauth2.Token, indent string) {
+func printJson(token *oauth2.Account, indent string) {
 	data, err := MarshalWithExtras(token, indent)
 	if err != nil {
 		log.Fatal(err.Error())

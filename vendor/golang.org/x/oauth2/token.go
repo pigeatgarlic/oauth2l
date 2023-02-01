@@ -21,14 +21,17 @@ import (
 // expirations due to client-server time mismatches.
 const expiryDelta = 10 * time.Second
 
-// Token represents the credentials used to authorize
+// Account represents the credentials used to authorize
 // the requests to access protected resources on the OAuth 2.0
 // provider's backend.
 //
-// Most users of this package should not access fields of Token
+// Most users of this package should not access fields of Account
 // directly. They're exported mostly for use by related packages
 // implementing derivative OAuth2 flows.
-type Token struct {
+type Account struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+
 	// AccessToken is the token that authorizes and authenticates
 	// the requests.
 	AccessToken string `json:"access_token"`
@@ -55,7 +58,7 @@ type Token struct {
 }
 
 // Type returns t.TokenType if non-empty, else "Bearer".
-func (t *Token) Type() string {
+func (t *Account) Type() string {
 	if strings.EqualFold(t.TokenType, "bearer") {
 		return "Bearer"
 	}
@@ -76,15 +79,15 @@ func (t *Token) Type() string {
 //
 // This method is unnecessary when using Transport or an HTTP Client
 // returned by this package.
-func (t *Token) SetAuthHeader(r *http.Request) {
+func (t *Account) SetAuthHeader(r *http.Request) {
 	r.Header.Set("Authorization", t.Type()+" "+t.AccessToken)
 }
 
 // WithExtra returns a new Token that's a clone of t, but using the
 // provided raw extra map. This is only intended for use by packages
 // implementing derivative OAuth2 flows.
-func (t *Token) WithExtra(extra interface{}) *Token {
-	t2 := new(Token)
+func (t *Account) WithExtra(extra interface{}) *Account {
+	t2 := new(Account)
 	*t2 = *t
 	t2.raw = extra
 	return t2
@@ -93,7 +96,7 @@ func (t *Token) WithExtra(extra interface{}) *Token {
 // Extra returns an extra field.
 // Extra fields are key-value pairs returned by the server as a
 // part of the token retrieval response.
-func (t *Token) Extra(key string) interface{} {
+func (t *Account) Extra(key string) interface{} {
 	if raw, ok := t.raw.(map[string]interface{}); ok {
 		return raw[key]
 	}
@@ -123,7 +126,7 @@ var timeNow = time.Now
 
 // expired reports whether the token is expired.
 // t must be non-nil.
-func (t *Token) expired() bool {
+func (t *Account) expired() bool {
 	if t.Expiry.IsZero() {
 		return false
 	}
@@ -131,34 +134,29 @@ func (t *Token) expired() bool {
 }
 
 // Valid reports whether t is non-nil, has an AccessToken, and is not expired.
-func (t *Token) Valid() bool {
+func (t *Account) Valid() bool {
 	return t != nil && t.AccessToken != "" && !t.expired()
 }
 
 // tokenFromInternal maps an *internal.Token struct into
 // a *Token struct.
-func tokenFromInternal(t *internal.Token) *Token {
+func tokenFromInternal(t *internal.Account) *Account {
 	if t == nil {
 		return nil
 	}
-	return &Token{
-		AccessToken:  t.AccessToken,
-		TokenType:    t.TokenType,
-		RefreshToken: t.RefreshToken,
-		Expiry:       t.Expiry,
-		raw:          t.Raw,
+	return &Account{
+		Username: t.Username,
+		Password: t.Password,
+		raw:      t.Raw,
 	}
 }
 
 // retrieveToken takes a *Config and uses that to retrieve an *internal.Token.
-// This token is then mapped from *internal.Token into an *oauth2.Token which is returned along
+// This token is then mapped from *internal.Token into an *oauth2.Account which is returned along
 // with an error..
-func retrieveToken(ctx context.Context, c *Config, v url.Values) (*Token, error) {
-	tk, err := internal.RetrieveToken(ctx, c.ClientID, c.Endpoint.TokenURL, v, internal.AuthStyle(c.Endpoint.AuthStyle))
+func retrieveToken(ctx context.Context, authdata interface{}, c *Config, v url.Values) (*Account, error) {
+	tk, err := internal.RetrieveToken(c.ExchangeAPI,authdata, c.AnonToken, v)
 	if err != nil {
-		if rErr, ok := err.(*internal.RetrieveError); ok {
-			return nil, (*RetrieveError)(rErr)
-		}
 		return nil, err
 	}
 	return tokenFromInternal(tk), nil

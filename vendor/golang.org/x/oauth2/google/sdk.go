@@ -26,7 +26,6 @@ type sdkCredentials struct {
 	Data []struct {
 		Credential struct {
 			ClientID     string     `json:"client_id"`
-			ClientSecret string     `json:"client_secret"`
 			AccessToken  string     `json:"access_token"`
 			RefreshToken string     `json:"refresh_token"`
 			TokenExpiry  *time.Time `json:"token_expiry"`
@@ -42,7 +41,7 @@ type sdkCredentials struct {
 // authorized via the Google Cloud SDK.
 type SDKConfig struct {
 	conf         oauth2.Config
-	initialToken *oauth2.Token
+	initialToken *oauth2.Account
 }
 
 // NewSDKConfig creates an SDKConfig for the given Google Cloud SDK
@@ -103,13 +102,12 @@ func NewSDKConfig(account string) (*SDKConfig, error) {
 			}
 			return &SDKConfig{
 				conf: oauth2.Config{
-					ClientID:     d.Credential.ClientID,
-					ClientSecret: d.Credential.ClientSecret,
-					Scopes:       strings.Split(d.Key.Scope, " "),
-					Endpoint:     Endpoint,
-					RedirectURL:  "oob",
+					ClientID:    d.Credential.ClientID,
+					Scopes:      strings.Split(d.Key.Scope, " "),
+					Endpoint:    Endpoint,
+					RedirectURL: "oob",
 				},
-				initialToken: &oauth2.Token{
+				initialToken: &oauth2.Account{
 					AccessToken:  d.Credential.AccessToken,
 					RefreshToken: d.Credential.RefreshToken,
 					Expiry:       expiry,

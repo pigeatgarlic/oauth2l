@@ -27,7 +27,7 @@ const (
 )
 
 // Fetches and returns OAuth access token using SSO CLI.
-func SSOFetch(cli string, email string, scope string) (*oauth2.Token, error) {
+func SSOFetch(cli string, email string, scope string) (*oauth2.Account, error) {
 	if cli == "" {
 		cli = defaultCli
 	}
@@ -40,7 +40,7 @@ func SSOFetch(cli string, email string, scope string) (*oauth2.Token, error) {
 		return nil, err
 	}
 	accessToken := out.String()
-	token := oauth2.Token{}
+	token := oauth2.Account{}
 	token.AccessToken = accessToken
 	token.TokenType = "Bearer"
 	return &token, nil

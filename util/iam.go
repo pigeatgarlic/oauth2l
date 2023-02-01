@@ -41,7 +41,7 @@ type iamTokenJSON struct {
 // token approved for at least one of the following scopes:
 // * https://www.googleapis.com/auth/iam
 // * https://www.googleapis.com/auth/cloud-platform
-func GenerateServiceAccountAccessToken(accessToken string, serviceAccount string, scope string) (*oauth2.Token, error) {
+func GenerateServiceAccountAccessToken(accessToken string, serviceAccount string, scope string) (*oauth2.Account, error) {
 	form := url.Values{}
 	for _, s := range strings.Split(scope, " ") {
 		form.Add("scope", s)
@@ -70,7 +70,7 @@ func GenerateServiceAccountAccessToken(accessToken string, serviceAccount string
 	if err = json.Unmarshal(body, &itj); err != nil {
 		return nil, err
 	}
-	token := oauth2.Token{}
+	token := oauth2.Account{}
 	token.AccessToken = itj.AccessToken
 	token.Expiry, _ = time.Parse(time.RFC3339, itj.ExpireTime)
 	var raw map[string]interface{}

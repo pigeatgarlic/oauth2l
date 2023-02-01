@@ -69,7 +69,7 @@ type authHandlerSource struct {
 	pkce        *PKCEParams
 }
 
-func (source authHandlerSource) Token() (*oauth2.Token, error) {
+func (source authHandlerSource) Token() (*oauth2.Account, error) {
 	// Step 1: Obtain auth code.
 	var authCodeUrlOptions []oauth2.AuthCodeOption
 	if source.pkce != nil && source.pkce.Challenge != "" && source.pkce.ChallengeMethod != "" {
@@ -90,5 +90,5 @@ func (source authHandlerSource) Token() (*oauth2.Token, error) {
 	if source.pkce != nil && source.pkce.Verifier != "" {
 		exchangeOptions = []oauth2.AuthCodeOption{oauth2.SetAuthURLParam(codeVerifierKey, source.pkce.Verifier)}
 	}
-	return source.config.Exchange(source.ctx, code, exchangeOptions...)
+	return source.config.Exchange(source.ctx,source.config.Authdata, code, exchangeOptions...)
 }

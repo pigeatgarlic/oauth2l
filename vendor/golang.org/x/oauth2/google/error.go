@@ -55,7 +55,7 @@ func newErrWrappingTokenSource(ts oauth2.TokenSource) oauth2.TokenSource {
 // Token returns the current token if it's still valid, else will
 // refresh the current token (using r.Context for HTTP client
 // information) and return the new one.
-func (s *errWrappingTokenSource) Token() (*oauth2.Token, error) {
+func (s *errWrappingTokenSource) Token() (*oauth2.Account, error) {
 	t, err := s.src.Token()
 	if err != nil {
 		return nil, newAuthenticationError(err)

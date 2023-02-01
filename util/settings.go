@@ -53,6 +53,8 @@ type Settings struct {
 	// Used for Service Account Impersonation.
 	// Exchange User access token for Service Account access token.
 	ServiceAccount string
+
+	Authdata interface{}
 }
 
 func (s Settings) GetAuthType() string {

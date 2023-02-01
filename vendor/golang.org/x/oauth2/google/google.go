@@ -35,10 +35,13 @@ const JWTTokenURL = "https://oauth2.googleapis.com/token"
 // https://console.developers.google.com, under "Credentials". Download the Web
 // application credentials in the JSON format and provide the contents of the
 // file as jsonKey.
-func ConfigFromJSON(jsonKey []byte, scope ...string) (*oauth2.Config, error) {
+func ConfigFromJSON(authdata interface{},jsonKey []byte, scope ...string) (*oauth2.Config, error) {
 	type cred struct {
-		ClientID     string   `json:"client_id"`
-		ClientSecret string   `json:"client_secret"`
+		ClientID string `json:"client_id"`
+
+		ExchangeAPI string `json:"exchange_api"`
+		AnonToken   string `json:"anon_token"`
+
 		RedirectURIs []string `json:"redirect_uris"`
 		AuthURI      string   `json:"auth_uri"`
 		TokenURI     string   `json:"token_uri"`
@@ -63,10 +66,12 @@ func ConfigFromJSON(jsonKey []byte, scope ...string) (*oauth2.Config, error) {
 		return nil, errors.New("oauth2/google: missing redirect URL in the client_credentials.json")
 	}
 	return &oauth2.Config{
-		ClientID:     c.ClientID,
-		ClientSecret: c.ClientSecret,
-		RedirectURL:  c.RedirectURIs[0],
-		Scopes:       scope,
+		Authdata:    authdata,
+		ClientID:    c.ClientID,
+		ExchangeAPI: c.ExchangeAPI,
+		AnonToken:   c.AnonToken,
+		RedirectURL: c.RedirectURIs[0],
+		Scopes:      scope,
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  c.AuthURI,
 			TokenURL: c.TokenURI,
@@ -112,7 +117,8 @@ type credentialsFile struct {
 
 	// User Credential fields
 	// (These typically come from gcloud auth.)
-	ClientSecret string `json:"client_secret"`
+	ExchangeAPI  string `json:"exchange_api"`
+	AnonToken    string `json:"anon_token"`
 	ClientID     string `json:"client_id"`
 	RefreshToken string `json:"refresh_token"`
 
@@ -154,9 +160,11 @@ func (f *credentialsFile) tokenSource(ctx context.Context, params CredentialsPar
 		return cfg.TokenSource(ctx), nil
 	case userCredentialsKey:
 		cfg := &oauth2.Config{
-			ClientID:     f.ClientID,
-			ClientSecret: f.ClientSecret,
-			Scopes:       params.Scopes,
+			ClientID:    f.ClientID,
+			ExchangeAPI: f.ExchangeAPI,
+			AnonToken:   f.AnonToken,
+
+			Scopes: params.Scopes,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:   f.AuthURL,
 				TokenURL:  f.TokenURL,
@@ -169,7 +177,7 @@ func (f *credentialsFile) tokenSource(ctx context.Context, params CredentialsPar
 		if cfg.Endpoint.TokenURL == "" {
 			cfg.Endpoint.TokenURL = Endpoint.TokenURL
 		}
-		tok := &oauth2.Token{RefreshToken: f.RefreshToken}
+		tok := &oauth2.Account{RefreshToken: f.RefreshToken}
 		return cfg.TokenSource(ctx, tok), nil
 	case externalAccountKey:
 		cfg := &externalaccount.Config{
@@ -178,7 +186,6 @@ func (f *credentialsFile) tokenSource(ctx context.Context, params CredentialsPar
 			TokenURL:                       f.TokenURLExternal,
 			TokenInfoURL:                   f.TokenInfoURL,
 			ServiceAccountImpersonationURL: f.ServiceAccountImpersonationURL,
-			ClientSecret:                   f.ClientSecret,
 			ClientID:                       f.ClientID,
 			CredentialSource:               f.CredentialSource,
 			QuotaProjectID:                 f.QuotaProjectID,
@@ -226,7 +233,7 @@ type computeSource struct {
 	scopes  []string
 }
 
-func (cs computeSource) Token() (*oauth2.Token, error) {
+func (cs computeSource) Token() (*oauth2.Account, error) {
 	if !metadata.OnGCE() {
 		return nil, errors.New("oauth2/google: can't get a token from the metadata service; not running on GCE")
 	}
@@ -256,7 +263,7 @@ func (cs computeSource) Token() (*oauth2.Token, error) {
 	if res.ExpiresInSec == 0 || res.AccessToken == "" {
 		return nil, fmt.Errorf("oauth2/google: incomplete token received from metadata")
 	}
-	tok := &oauth2.Token{
+	tok := &oauth2.Account{
 		AccessToken: res.AccessToken,
 		TokenType:   res.TokenType,
 		Expiry:      time.Now().Add(time.Duration(res.ExpiresInSec) * time.Second),

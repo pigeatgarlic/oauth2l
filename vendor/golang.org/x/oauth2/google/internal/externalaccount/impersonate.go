@@ -51,7 +51,7 @@ type ImpersonateTokenSource struct {
 }
 
 // Token performs the exchange to get a temporary service account token to allow access to GCP.
-func (its ImpersonateTokenSource) Token() (*oauth2.Token, error) {
+func (its ImpersonateTokenSource) Token() (*oauth2.Account, error) {
 	reqBody := generateAccessTokenReq{
 		Lifetime:  "3600s",
 		Scope:     its.Scopes,
@@ -90,7 +90,7 @@ func (its ImpersonateTokenSource) Token() (*oauth2.Token, error) {
 	if err != nil {
 		return nil, fmt.Errorf("oauth2/google: unable to parse expiry: %v", err)
 	}
-	return &oauth2.Token{
+	return &oauth2.Account{
 		AccessToken: accessTokenResp.AccessToken,
 		Expiry:      expiry,
 		TokenType:   "Bearer",

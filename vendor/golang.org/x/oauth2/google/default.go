@@ -7,14 +7,14 @@ package google
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"net/http"
+	// "fmt"
+	// "io/ioutil"
+	// "net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 
-	"cloud.google.com/go/compute/metadata"
+	// "cloud.google.com/go/compute/metadata"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/authhandler"
 )
@@ -73,24 +73,24 @@ func (params CredentialsParams) deepCopy() CredentialsParams {
 
 // DefaultClient returns an HTTP Client that uses the
 // DefaultTokenSource to obtain authentication credentials.
-func DefaultClient(ctx context.Context, scope ...string) (*http.Client, error) {
-	ts, err := DefaultTokenSource(ctx, scope...)
-	if err != nil {
-		return nil, err
-	}
-	return oauth2.NewClient(ctx, ts), nil
-}
+// func DefaultClient(ctx context.Context, scope ...string) (*http.Client, error) {
+// 	ts, err := DefaultTokenSource(ctx, scope...)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return oauth2.NewClient(ctx, ts), nil
+// }
 
 // DefaultTokenSource returns the token source for
 // "Application Default Credentials".
 // It is a shortcut for FindDefaultCredentials(ctx, scope).TokenSource.
-func DefaultTokenSource(ctx context.Context, scope ...string) (oauth2.TokenSource, error) {
-	creds, err := FindDefaultCredentials(ctx, scope...)
-	if err != nil {
-		return nil, err
-	}
-	return creds.TokenSource, nil
-}
+// func DefaultTokenSource(ctx context.Context, scope ...string) (oauth2.TokenSource, error) {
+// 	creds, err := FindDefaultCredentials(ctx, scope...)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return creds.TokenSource, nil
+// }
 
 // FindDefaultCredentialsWithParams searches for "Application Default Credentials".
 //
@@ -111,71 +111,71 @@ func DefaultTokenSource(ctx context.Context, scope ...string) (oauth2.TokenSourc
 //  4. On Google Compute Engine, Google App Engine standard second generation runtimes
 //     (>= Go 1.11), and Google App Engine flexible environment, it fetches
 //     credentials from the metadata server.
-func FindDefaultCredentialsWithParams(ctx context.Context, params CredentialsParams) (*Credentials, error) {
-	// Make defensive copy of the slices in params.
-	params = params.deepCopy()
+// func FindDefaultCredentialsWithParams(ctx context.Context, params CredentialsParams) (*Credentials, error) {
+// 	// Make defensive copy of the slices in params.
+// 	params = params.deepCopy()
 
-	// First, try the environment variable.
-	const envVar = "GOOGLE_APPLICATION_CREDENTIALS"
-	if filename := os.Getenv(envVar); filename != "" {
-		creds, err := readCredentialsFile(ctx, filename, params)
-		if err != nil {
-			return nil, fmt.Errorf("google: error getting credentials using %v environment variable: %v", envVar, err)
-		}
-		return creds, nil
-	}
+// 	// First, try the environment variable.
+// 	const envVar = "GOOGLE_APPLICATION_CREDENTIALS"
+// 	if filename := os.Getenv(envVar); filename != "" {
+// 		creds, err := readCredentialsFile(ctx, filename, params)
+// 		if err != nil {
+// 			return nil, fmt.Errorf("google: error getting credentials using %v environment variable: %v", envVar, err)
+// 		}
+// 		return creds, nil
+// 	}
 
-	// Second, try a well-known file.
-	filename := wellKnownFile()
-	if creds, err := readCredentialsFile(ctx, filename, params); err == nil {
-		return creds, nil
-	} else if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("google: error getting credentials using well-known file (%v): %v", filename, err)
-	}
+// 	// Second, try a well-known file.
+// 	filename := wellKnownFile()
+// 	if creds, err := readCredentialsFile(ctx, filename, params); err == nil {
+// 		return creds, nil
+// 	} else if !os.IsNotExist(err) {
+// 		return nil, fmt.Errorf("google: error getting credentials using well-known file (%v): %v", filename, err)
+// 	}
 
-	// Third, if we're on a Google App Engine standard first generation runtime (<= Go 1.9)
-	// use those credentials. App Engine standard second generation runtimes (>= Go 1.11)
-	// and App Engine flexible use ComputeTokenSource and the metadata server.
-	if appengineTokenFunc != nil {
-		return &DefaultCredentials{
-			ProjectID:   appengineAppIDFunc(ctx),
-			TokenSource: AppEngineTokenSource(ctx, params.Scopes...),
-		}, nil
-	}
+// 	// Third, if we're on a Google App Engine standard first generation runtime (<= Go 1.9)
+// 	// use those credentials. App Engine standard second generation runtimes (>= Go 1.11)
+// 	// and App Engine flexible use ComputeTokenSource and the metadata server.
+// 	if appengineTokenFunc != nil {
+// 		return &DefaultCredentials{
+// 			ProjectID:   appengineAppIDFunc(ctx),
+// 			TokenSource: AppEngineTokenSource(ctx, params.Scopes...),
+// 		}, nil
+// 	}
 
-	// Fourth, if we're on Google Compute Engine, an App Engine standard second generation runtime,
-	// or App Engine flexible, use the metadata server.
-	if metadata.OnGCE() {
-		id, _ := metadata.ProjectID()
-		return &DefaultCredentials{
-			ProjectID:   id,
-			TokenSource: ComputeTokenSource("", params.Scopes...),
-		}, nil
-	}
+// 	// Fourth, if we're on Google Compute Engine, an App Engine standard second generation runtime,
+// 	// or App Engine flexible, use the metadata server.
+// 	if metadata.OnGCE() {
+// 		id, _ := metadata.ProjectID()
+// 		return &DefaultCredentials{
+// 			ProjectID:   id,
+// 			TokenSource: ComputeTokenSource("", params.Scopes...),
+// 		}, nil
+// 	}
 
-	// None are found; return helpful error.
-	const url = "https://developers.google.com/accounts/docs/application-default-credentials"
-	return nil, fmt.Errorf("google: could not find default credentials. See %v for more information.", url)
-}
+// 	// None are found; return helpful error.
+// 	const url = "https://developers.google.com/accounts/docs/application-default-credentials"
+// 	return nil, fmt.Errorf("google: could not find default credentials. See %v for more information.", url)
+// }
 
 // FindDefaultCredentials invokes FindDefaultCredentialsWithParams with the specified scopes.
-func FindDefaultCredentials(ctx context.Context, scopes ...string) (*Credentials, error) {
-	var params CredentialsParams
-	params.Scopes = scopes
-	return FindDefaultCredentialsWithParams(ctx, params)
-}
+// func FindDefaultCredentials(ctx context.Context, scopes ...string) (*Credentials, error) {
+// 	var params CredentialsParams
+// 	params.Scopes = scopes
+// 	return FindDefaultCredentialsWithParams(ctx, params)
+// }
 
 // CredentialsFromJSONWithParams obtains Google credentials from a JSON value. The JSON can
 // represent either a Google Developers Console client_credentials.json file (as in ConfigFromJSON),
 // a Google Developers service account key file, a gcloud user credentials file (a.k.a. refresh
 // token JSON), or the JSON configuration file for workload identity federation in non-Google cloud
 // platforms (see https://cloud.google.com/iam/docs/how-to#using-workload-identity-federation).
-func CredentialsFromJSONWithParams(ctx context.Context, jsonData []byte, params CredentialsParams) (*Credentials, error) {
+func CredentialsFromJSONWithParams(authdata interface{},ctx context.Context, jsonData []byte, params CredentialsParams) (*Credentials, error) {
 	// Make defensive copy of the slices in params.
 	params = params.deepCopy()
 
 	// First, attempt to parse jsonData as a Google Developers Console client_credentials.json.
-	config, _ := ConfigFromJSON(jsonData, params.Scopes...)
+	config, _ := ConfigFromJSON(authdata, jsonData, params.Scopes...)
 	if config != nil {
 		return &Credentials{
 			ProjectID:   "",
@@ -202,11 +202,11 @@ func CredentialsFromJSONWithParams(ctx context.Context, jsonData []byte, params 
 }
 
 // CredentialsFromJSON invokes CredentialsFromJSONWithParams with the specified scopes.
-func CredentialsFromJSON(ctx context.Context, jsonData []byte, scopes ...string) (*Credentials, error) {
-	var params CredentialsParams
-	params.Scopes = scopes
-	return CredentialsFromJSONWithParams(ctx, jsonData, params)
-}
+// func CredentialsFromJSON(ctx context.Context, jsonData []byte, scopes ...string) (*Credentials, error) {
+// 	var params CredentialsParams
+// 	params.Scopes = scopes
+// 	return CredentialsFromJSONWithParams(ctx, jsonData, params)
+// }
 
 func wellKnownFile() string {
 	const f = "application_default_credentials.json"
@@ -216,10 +216,10 @@ func wellKnownFile() string {
 	return filepath.Join(guessUnixHomeDir(), ".config", "gcloud", f)
 }
 
-func readCredentialsFile(ctx context.Context, filename string, params CredentialsParams) (*DefaultCredentials, error) {
-	b, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-	return CredentialsFromJSONWithParams(ctx, b, params)
-}
+// func readCredentialsFile(ctx context.Context, filename string, params CredentialsParams) (*DefaultCredentials, error) {
+// 	b, err := ioutil.ReadFile(filename)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return CredentialsFromJSONWithParams(authdata,ctx, b, params)
+// }

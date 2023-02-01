@@ -77,7 +77,7 @@ type jwtAccessTokenSource struct {
 	pkID            string
 }
 
-func (ts *jwtAccessTokenSource) Token() (*oauth2.Token, error) {
+func (ts *jwtAccessTokenSource) Token() (*oauth2.Account, error) {
 	iat := time.Now()
 	exp := iat.Add(time.Hour)
 	scope := strings.Join(ts.scopes, " ")
@@ -98,5 +98,5 @@ func (ts *jwtAccessTokenSource) Token() (*oauth2.Token, error) {
 	if err != nil {
 		return nil, fmt.Errorf("google: could not encode JWT: %v", err)
 	}
-	return &oauth2.Token{AccessToken: msg, TokenType: "Bearer", Expiry: exp}, nil
+	return &oauth2.Account{AccessToken: msg, TokenType: "Bearer", Expiry: exp}, nil
 }

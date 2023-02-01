@@ -230,7 +230,7 @@ type tokenSource struct {
 }
 
 // Token allows tokenSource to conform to the oauth2.TokenSource interface.
-func (ts tokenSource) Token() (*oauth2.Token, error) {
+func (ts tokenSource) Token() (*oauth2.Account, error) {
 	conf := ts.conf
 
 	credSource, err := conf.parse(ts.ctx)
@@ -270,7 +270,7 @@ func (ts tokenSource) Token() (*oauth2.Token, error) {
 		return nil, err
 	}
 
-	accessToken := &oauth2.Token{
+	accessToken := &oauth2.Account{
 		AccessToken: stsResp.AccessToken,
 		TokenType:   stsResp.TokenType,
 	}

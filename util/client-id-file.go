@@ -21,22 +21,6 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-// IsValidOauthClientIdFile determines if a valid OAuth Client ID file can be created
-// from a credentials json file.
-//
-// credentialsJSON represents the credentials json file.
-//
-// Returns isValidCredFile: true if it can be recreated, false otherwise.
-func IsValidOauthClientIdFile(credentialsJSON string) (isValidCredFile bool) {
-	if credentialsJSON == "" {
-		return false
-	}
-
-	data := []byte(credentialsJSON)
-	_, err := google.ConfigFromJSON(data)
-	return err == nil
-}
-
 // getFirstRedirectURI returns the the first URI in "redirect_uris"
 //
 // credentialsJSON represents the credentials json file.
@@ -45,7 +29,7 @@ func IsValidOauthClientIdFile(credentialsJSON string) (isValidCredFile bool) {
 // Returns err: if unable to process the credentialsJSON file.
 func GetFirstRedirectURI(credentialsJSON string) (firstRedirectURI string, err error) {
 	data := []byte(credentialsJSON)
-	credentials, err := google.ConfigFromJSON(data)
+	credentials, err := google.ConfigFromJSON(nil,data)
 	if err != nil {
 		return "", err
 	}

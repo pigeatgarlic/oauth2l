@@ -43,7 +43,7 @@ var (
 
 type tokenLock struct {
 	mu sync.Mutex // guards t; held while fetching or updating t
-	t  *oauth2.Token
+	t  *oauth2.Account
 }
 
 type gaeTokenSource struct {
@@ -52,7 +52,7 @@ type gaeTokenSource struct {
 	key    string // to aeTokens map; space-separated scopes
 }
 
-func (ts *gaeTokenSource) Token() (*oauth2.Token, error) {
+func (ts *gaeTokenSource) Token() (*oauth2.Account, error) {
 	aeTokensMu.Lock()
 	tok, ok := aeTokens[ts.key]
 	if !ok {
@@ -70,7 +70,7 @@ func (ts *gaeTokenSource) Token() (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	tok.t = &oauth2.Token{
+	tok.t = &oauth2.Account{
 		AccessToken: access,
 		Expiry:      exp,
 	}

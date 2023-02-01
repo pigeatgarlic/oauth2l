@@ -51,7 +51,7 @@ type CacheKey struct {
 	ServiceAccount string
 }
 
-func LookupCache(settings *Settings) (*oauth2.Token, error) {
+func LookupCache(settings *Settings) (*oauth2.Account, error) {
 	if CacheLocation == "" {
 		return nil, nil
 	}
@@ -67,7 +67,7 @@ func LookupCache(settings *Settings) (*oauth2.Token, error) {
 	return UnmarshalWithExtras(val)
 }
 
-func InsertCache(settings *Settings, token *oauth2.Token) error {
+func InsertCache(settings *Settings, token *oauth2.Account) error {
 	if CacheLocation == "" {
 		return nil
 	}
@@ -160,9 +160,9 @@ func GuessUnixHomeDir() string {
 	return ""
 }
 
-// Marshals the given oauth2.Token into a JSON bytearray and include Extra
+// Marshals the given oauth2.Account into a JSON bytearray and include Extra
 // fields that normally would be omitted with default marshalling.
-func MarshalWithExtras(token *oauth2.Token, indent string) ([]byte, error) {
+func MarshalWithExtras(token *oauth2.Account, indent string) ([]byte, error) {
 	data, err := json.Marshal(token)
 	if err != nil {
 		return nil, err
@@ -184,15 +184,15 @@ func MarshalWithExtras(token *oauth2.Token, indent string) ([]byte, error) {
 	return json.MarshalIndent(m, "", indent)
 }
 
-// Unmarshals the given JSON bytearray into oauth2.Token and include Extra
+// Unmarshals the given JSON bytearray into oauth2.Account and include Extra
 // fields that normally would be omitted with default unmarshalling.
-func UnmarshalWithExtras(data []byte) (*oauth2.Token, error) {
+func UnmarshalWithExtras(data []byte) (*oauth2.Account, error) {
 	var extra map[string]interface{}
 	err := json.Unmarshal(data, &extra)
 	if err != nil {
 		return nil, err
 	}
-	var token oauth2.Token
+	var token oauth2.Account
 	err = json.Unmarshal(data, &token)
 	if err != nil {
 		return nil, err

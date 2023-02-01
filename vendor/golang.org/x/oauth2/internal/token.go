@@ -5,93 +5,30 @@
 package internal
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math"
-	"mime"
 	"net/http"
 	"net/url"
-	"strconv"
-	"strings"
 	"sync"
-	"time"
-
-	"golang.org/x/net/context/ctxhttp"
 )
 
-// Token represents the credentials used to authorize
+// Account represents the credentials used to authorize
 // the requests to access protected resources on the OAuth 2.0
 // provider's backend.
 //
-// This type is a mirror of oauth2.Token and exists to break
+// This type is a mirror of oauth2.Account and exists to break
 // an otherwise-circular dependency. Other internal packages
-// should convert this Token into an oauth2.Token before use.
-type Token struct {
-	// AccessToken is the token that authorizes and authenticates
-	// the requests.
-	AccessToken string
-
-	// TokenType is the type of token.
-	// The Type method returns either this or "Bearer", the default.
-	TokenType string
-
-	// RefreshToken is a token that's used by the application
-	// (as opposed to the user) to refresh the access token
-	// if it expires.
-	RefreshToken string
-
-	// Expiry is the optional expiration time of the access token.
-	//
-	// If zero, TokenSource implementations will reuse the same
-	// token forever and RefreshToken or equivalent
-	// mechanisms for that TokenSource will not be used.
-	Expiry time.Time
+// should convert this Account into an oauth2.Account before use.
+type Account struct {
+	Username string			`json:"username"`
+	Password string			`json:"password"`
 
 	// Raw optionally contains extra metadata from the server
 	// when updating a token.
 	Raw interface{}
-}
-
-// tokenJSON is the struct representing the HTTP response from OAuth2
-// providers returning a token in JSON form.
-type tokenJSON struct {
-	AccessToken  string         `json:"access_token"`
-	TokenType    string         `json:"token_type"`
-	RefreshToken string         `json:"refresh_token"`
-	ExpiresIn    expirationTime `json:"expires_in"` // at least PayPal returns string, while most return number
-}
-
-func (e *tokenJSON) expiry() (t time.Time) {
-	if v := e.ExpiresIn; v != 0 {
-		return time.Now().Add(time.Duration(v) * time.Second)
-	}
-	return
-}
-
-type expirationTime int32
-
-func (e *expirationTime) UnmarshalJSON(b []byte) error {
-	if len(b) == 0 || string(b) == "null" {
-		return nil
-	}
-	var n json.Number
-	err := json.Unmarshal(b, &n)
-	if err != nil {
-		return err
-	}
-	i, err := n.Int64()
-	if err != nil {
-		return err
-	}
-	if i > math.MaxInt32 {
-		i = math.MaxInt32
-	}
-	*e = expirationTime(i)
-	return nil
 }
 
 // RegisterBrokenAuthHeaderProvider previously did something. It is now a no-op.
@@ -129,154 +66,37 @@ func ResetAuthCache() {
 	authStyleCache.m = nil
 }
 
-// lookupAuthStyle reports which auth style we last used with tokenURL
-// when calling RetrieveToken and whether we have ever done so.
-func lookupAuthStyle(tokenURL string) (style AuthStyle, ok bool) {
-	authStyleCache.Lock()
-	defer authStyleCache.Unlock()
-	style, ok = authStyleCache.m[tokenURL]
-	return
-}
-
-// setAuthStyle adds an entry to authStyleCache, documented above.
-func setAuthStyle(tokenURL string, v AuthStyle) {
-	authStyleCache.Lock()
-	defer authStyleCache.Unlock()
-	if authStyleCache.m == nil {
-		authStyleCache.m = make(map[string]AuthStyle)
+func RetrieveToken(exchange_api string,authdata interface{} , anon_token string, v url.Values) (*Account, error) {
+	data,err := json.Marshal(authdata)
+	if err != nil {
+		return nil,err
 	}
-	authStyleCache.m[tokenURL] = v
-}
 
-// newTokenRequest returns a new *http.Request to retrieve a new token
-// from tokenURL using the provided clientID, clientSecret, and POST
-// body parameters.
-//
-// inParams is whether the clientID & clientSecret should be encoded
-// as the POST body. An 'inParams' value of true means to send it in
-// the POST body (along with any values in v); false means to send it
-// in the Authorization header.
-func newTokenRequest(tokenURL, clientID, clientSecret string, v url.Values, authStyle AuthStyle) (*http.Request, error) {
-	if authStyle == AuthStyleInParams {
-		v = cloneURLValues(v)
-		if clientID != "" {
-			v.Set("client_id", clientID)
-		}
-		if clientSecret != "" {
-			v.Set("client_secret", clientSecret)
-		}
-	}
-	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(v.Encode()))
+	req, _ := http.NewRequest("POST", exchange_api, bytes.NewReader(data))
+	req.Header.Set("Oauth2-Token", v.Encode())
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s",anon_token))
+
+	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if authStyle == AuthStyleInHeader {
-		req.SetBasicAuth(url.QueryEscape(clientID), url.QueryEscape(clientSecret))
-	}
-	return req, nil
-}
+	defer func ()  {
+		r.Body.Close()
+	}()
 
-func cloneURLValues(v url.Values) url.Values {
-	v2 := make(url.Values, len(v))
-	for k, vv := range v {
-		v2[k] = append([]string(nil), vv...)
-	}
-	return v2
-}
-
-func RetrieveToken(ctx context.Context, clientID, tokenURL string, v url.Values, authStyle AuthStyle) (*Token, error) {
-	// TODO fetch
-
-	v.Set("client_id", clientID)
-	v.Set("client_secret","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")
-	req,_ := http.NewRequest("POST", tokenURL, strings.NewReader(v.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	r, err := ctxhttp.Do(ctx, ContextClient(ctx), req)
-	if err != nil {
-		return nil, err
-	}
 	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 1<<20))
-	r,err = ctxhttp.Do(ctx, ContextClient(ctx), req)
 	if err != nil {
 		return nil, err
 	}
-	r.Body.Close()
 
 
-	
-
-
-	token := &Token{
-		AccessToken:  string(body),
-		TokenType:    "test",
-		RefreshToken: "test",
-		Raw:          "test",
+	token := &Account{ }
+	err = json.Unmarshal(body,token)
+	if err != nil {
+		return nil, err
 	}
+
 	return token, nil
 }
 
-func doTokenRoundTrip(ctx context.Context, req *http.Request) (*Token, error) {
-	r, err := ctxhttp.Do(ctx, ContextClient(ctx), req)
-	if err != nil {
-		return nil, err
-	}
-	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 1<<20))
-	r.Body.Close()
-	if err != nil {
-		return nil, fmt.Errorf("oauth2: cannot fetch token: %v", err)
-	}
-	if code := r.StatusCode; code < 200 || code > 299 {
-		return nil, &RetrieveError{
-			Response: r,
-			Body:     body,
-		}
-	}
 
-	var token *Token
-	content, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	switch content {
-	case "application/x-www-form-urlencoded", "text/plain":
-		vals, err := url.ParseQuery(string(body))
-		if err != nil {
-			return nil, err
-		}
-		token = &Token{
-			AccessToken:  vals.Get("access_token"),
-			TokenType:    vals.Get("token_type"),
-			RefreshToken: vals.Get("refresh_token"),
-			Raw:          vals,
-		}
-		e := vals.Get("expires_in")
-		expires, _ := strconv.Atoi(e)
-		if expires != 0 {
-			token.Expiry = time.Now().Add(time.Duration(expires) * time.Second)
-		}
-	default:
-		var tj tokenJSON
-		if err = json.Unmarshal(body, &tj); err != nil {
-			return nil, err
-		}
-		token = &Token{
-			AccessToken:  tj.AccessToken,
-			TokenType:    tj.TokenType,
-			RefreshToken: tj.RefreshToken,
-			Expiry:       tj.expiry(),
-			Raw:          make(map[string]interface{}),
-		}
-		json.Unmarshal(body, &token.Raw) // no error checks for optional fields
-	}
-	if token.AccessToken == "" {
-		return nil, errors.New("oauth2: server response missing access_token")
-	}
-	return token, nil
-}
-
-type RetrieveError struct {
-	Response *http.Response
-	Body     []byte
-}
-
-func (r *RetrieveError) Error() string {
-	return fmt.Sprintf("oauth2: cannot fetch token: %v\nResponse: %s", r.Response.Status, r.Body)
-}
