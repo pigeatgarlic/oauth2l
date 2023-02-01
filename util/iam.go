@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/oauth2"
+	"github.com/pigeatgarlic/oauth2l/tools/oauth2"
 )
 
 // IamServiceAccountAccessTokenURL is used for generating accesss token for a Service Account.

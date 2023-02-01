@@ -19,7 +19,7 @@ import (
 	"encoding/base64"
 
 	"github.com/google/uuid"
-	"golang.org/x/oauth2/authhandler"
+	"github.com/pigeatgarlic/oauth2l/tools/oauth2/authhandler"
 )
 
 // GeneratePKCEParams generates a unique PKCE challenge and verifier combination,

@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/oauth2/authhandler"
+	"github.com/pigeatgarlic/oauth2l/tools/oauth2/authhandler"
 )
 
 // 3LO authorization handler. Determines what algorithm to use

@@ -25,7 +25,7 @@ import (
 	"net/url"
 	"strings"
 
-	"golang.org/x/oauth2"
+	"github.com/pigeatgarlic/oauth2l/tools/oauth2"
 )
 
 // StsURL is Google's Secure Token Service endpoint used for obtaining STS token.

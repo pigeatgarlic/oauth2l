@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"strings"
 
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
+	"github.com/pigeatgarlic/oauth2l/tools/oauth2"
+	"github.com/pigeatgarlic/oauth2l/tools/oauth2/google"
 )
 
 var DefaultScope = "https://www.googleapis.com/auth/cloud-platform"
@@ -96,11 +96,11 @@ func FindJSONCredentials(ctx context.Context, settings *Settings) (*google.Crede
 	params.Subject = settings.Email
 	params.PKCE = GeneratePKCEParams()
 	if settings.CredentialsJSON != "" {
-		return google.CredentialsFromJSONWithParams(settings.Authdata,ctx, []byte(settings.CredentialsJSON),
+		return google.CredentialsFromJSONWithParams(settings.Authdata, ctx, []byte(settings.CredentialsJSON),
 			params)
 
 	} else {
-		return nil, fmt.Errorf("no credential file");
+		return nil, fmt.Errorf("no credential file")
 		// return google.FindDefaultCredentialsWithParams(ctx, params)
 
 	}

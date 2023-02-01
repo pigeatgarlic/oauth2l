@@ -17,7 +17,7 @@ package util
 import (
 	"encoding/json"
 
-	"golang.org/x/oauth2/google"
+	"github.com/pigeatgarlic/oauth2l/tools/oauth2/google"
 )
 
 type refreshCredentialsJSON struct {
@@ -36,7 +36,7 @@ func BuildRefreshTokenJSON(refreshToken string, creds *google.Credentials) strin
 	if refreshToken == "" {
 		return ""
 	}
-	oauth2Config, err := google.ConfigFromJSON(nil,creds.JSON)
+	oauth2Config, err := google.ConfigFromJSON(nil, creds.JSON)
 	if err != nil {
 		return ""
 	}

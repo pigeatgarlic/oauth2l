@@ -18,7 +18,7 @@
 package util
 
 import (
-	"golang.org/x/oauth2/google"
+	"github.com/pigeatgarlic/oauth2l/tools/oauth2/google"
 )
 
 // getFirstRedirectURI returns the the first URI in "redirect_uris"
@@ -29,7 +29,7 @@ import (
 // Returns err: if unable to process the credentialsJSON file.
 func GetFirstRedirectURI(credentialsJSON string) (firstRedirectURI string, err error) {
 	data := []byte(credentialsJSON)
-	credentials, err := google.ConfigFromJSON(nil,data)
+	credentials, err := google.ConfigFromJSON(nil, data)
 	if err != nil {
 		return "", err
 	}

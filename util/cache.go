@@ -24,7 +24,7 @@ import (
 	"regexp"
 	"strings"
 
-	"golang.org/x/oauth2"
+	"github.com/pigeatgarlic/oauth2l/tools/oauth2"
 )
 
 const CacheFileName = ".oauth2l"
@@ -149,7 +149,7 @@ func createKey(settings *Settings) CacheKey {
 }
 
 func GuessUnixHomeDir() string {
-	// Prefer $HOME over user.Current due to glibc bug: golang.org/issue/13470
+	// Prefer $HOME over user.Current due to glibc bug: github.com/pigeatgarlic/oauth2l/3rd/golang/issue/13470
 	if v := os.Getenv("HOME"); v != "" {
 		return v
 	}

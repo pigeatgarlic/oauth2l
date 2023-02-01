@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/jessevdk/go-flags"
+	"github.com/pigeatgarlic/oauth2l/tools/oauth2"
 	"github.com/pigeatgarlic/oauth2l/util"
-	"golang.org/x/oauth2"
 )
 
 const (

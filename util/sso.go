@@ -19,7 +19,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"golang.org/x/oauth2"
+	"github.com/pigeatgarlic/oauth2l/tools/oauth2"
 )
 
 const (

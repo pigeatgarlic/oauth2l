@@ -24,8 +24,8 @@ import (
 	"net/http"
 	"time"
 
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
+	"github.com/pigeatgarlic/oauth2l/tools/oauth2"
+	"github.com/pigeatgarlic/oauth2l/tools/oauth2/google"
 )
 
 const (

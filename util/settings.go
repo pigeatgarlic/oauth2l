@@ -15,7 +15,7 @@
 package util
 
 import (
-	"golang.org/x/oauth2/authhandler"
+	"github.com/pigeatgarlic/oauth2l/tools/oauth2/authhandler"
 )
 
 var AuthTypeOAuth = "oauth"
