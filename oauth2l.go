@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/oauth2l/util"
 	"github.com/jessevdk/go-flags"
+	"github.com/pigeatgarlic/oauth2l/util"
 	"golang.org/x/oauth2"
 )
 

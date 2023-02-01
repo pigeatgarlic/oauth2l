@@ -1,4 +1,4 @@
-module github.com/google/oauth2l
+module github.com/pigeatgarlic/oauth2l
 
 go 1.16
 

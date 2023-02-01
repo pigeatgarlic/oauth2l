@@ -2,7 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/google/oauth2l"
+
+	"github.com/pigeatgarlic/oauth2l"
 )
 
 type data struct {
@@ -16,6 +17,6 @@ func main() {
 	if err != nil {
 		fmt.Printf("%s", err.Error())
 	} else {
-		fmt.Printf("Username: %s \nPassword: %s \n", token.Username,token.Password)
+		fmt.Printf("Username: %s \nPassword: %s \n", token.Username, token.Password)
 	}
 }

@@ -101,7 +101,7 @@ On other systems, you need to meet the following requirements to use this tool:
 
 ```bash
 # Get the package from Github
-$ git clone https://github.com/google/oauth2l
+$ git clone https://github.com/pigeatgarlic/oauth2l
 $ cd oauth2l
 
 # Install the package into your $GOPATH/bin/
