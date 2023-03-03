@@ -330,5 +330,5 @@ func StartAuth(authdata interface{}) (*oauth2.Account, error) {
 		}
 	}
 
-	return util.Fetch(settings, taskSettings), nil
+	return util.Fetch(settings, taskSettings)
 }

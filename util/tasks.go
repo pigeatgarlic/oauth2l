@@ -16,16 +16,12 @@ package util
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
-	"time"
 
 	"github.com/pigeatgarlic/oauth2l/tools/oauth2"
-	"github.com/pigeatgarlic/oauth2l/tools/oauth2/google"
 )
 
 const (
@@ -77,7 +73,7 @@ type TaskSettings struct {
 
 // Fetches and prints the token in plain text with the given settings
 // using Google Authenticator.
-func Fetch(settings *Settings, taskSettings *TaskSettings) *oauth2.Account {
+func Fetch(settings *Settings, taskSettings *TaskSettings) (*oauth2.Account,error) {
 	return fetchToken(settings, taskSettings)
 }
 
@@ -90,16 +86,6 @@ func Header(settings *Settings, taskSettings *TaskSettings) {
 
 // Fetches token with the given settings using Google Authenticator
 // and use the token as header to make curl request.
-func Curl(settings *Settings, taskSettings *TaskSettings) {
-	token := fetchToken(settings, taskSettings)
-	if token != nil {
-		header := BuildHeader(token.TokenType, token.AccessToken)
-		curlcli := taskSettings.CurlCli
-		url := taskSettings.Url
-		extraArgs := taskSettings.ExtraArgs
-		CurlCommand(curlcli, header, url, extraArgs...)
-	}
-}
 
 // Fetches the information of the given token.
 func Info(token string) int {
@@ -161,40 +147,13 @@ func getTokenInfo(token string) (string, error) {
 //
 // If STS is requested, we will perform an STS exchange
 // after the original access token has been fetched.
-func fetchToken(settings *Settings, taskSettings *TaskSettings) *oauth2.Account {
+func fetchToken(settings *Settings, taskSettings *TaskSettings) (*oauth2.Account,error) {
 	fetchSettings := settings
 	fetchSettings.Authdata = taskSettings.Authdata
 	token, err := FetchToken(context.Background(), fetchSettings)
 	if err != nil {
-		fmt.Println(err)
-		return nil
+		return nil,err
 	}
-	return token
+	return token,nil
 }
 
-func isTokenExpired(token *oauth2.Account) bool {
-	// SSO and STS tokens currently do not have expiration, as indicated by empty Expiry.
-	return token != nil && !token.Expiry.IsZero() && time.Now().After(token.Expiry)
-}
-
-func getCredentialType(creds *google.Credentials) string {
-	var m map[string]string
-	err := json.Unmarshal(creds.JSON, &m)
-	if err != nil && m["type"] != "" {
-		return m["type"]
-	}
-	return ""
-}
-
-func printHeader(tokenType string, token string) {
-	fmt.Println(BuildHeader(tokenType, token))
-}
-
-func printJson(token *oauth2.Account, indent string) {
-	data, err := MarshalWithExtras(token, indent)
-	if err != nil {
-		log.Fatal(err.Error())
-		return
-	}
-	fmt.Println(string(data))
-}
