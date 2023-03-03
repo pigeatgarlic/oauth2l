@@ -11,9 +11,7 @@ import (
 	// "fmt"
 	// "io/ioutil"
 	// "net/http"
-	"os"
-	"path/filepath"
-	"runtime"
+
 
 	// "cloud.google.com/go/compute/metadata"
 	"github.com/pigeatgarlic/oauth2l/tools/oauth2"
@@ -209,13 +207,7 @@ func CredentialsFromJSONWithParams(authdata interface{}, ctx context.Context, js
 // 	return CredentialsFromJSONWithParams(ctx, jsonData, params)
 // }
 
-func wellKnownFile() string {
-	const f = "application_default_credentials.json"
-	if runtime.GOOS == "windows" {
-		return filepath.Join(os.Getenv("APPDATA"), "gcloud", f)
-	}
-	return filepath.Join(guessUnixHomeDir(), ".config", "gcloud", f)
-}
+
 
 // func readCredentialsFile(ctx context.Context, filename string, params CredentialsParams) (*DefaultCredentials, error) {
 // 	b, err := ioutil.ReadFile(filename)

@@ -16,7 +16,6 @@ package util
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -31,12 +30,8 @@ var DefaultScope = "https://www.googleapis.com/auth/cloud-platform"
 func newTokenSource(ctx context.Context, settings *Settings) (*oauth2.TokenSource, error) {
 	var ts oauth2.TokenSource
 	var err error
-	if settings.GetAuthType() == AuthTypeAPIKey {
-		return nil, nil
-	} else if settings.GetAuthType() == AuthTypeOAuth {
+	if settings.GetAuthType() == AuthTypeOAuth {
 		ts, err = OAuthJSONTokenSource(ctx, settings)
-	} else if settings.GetAuthType() == AuthTypeJWT {
-		ts, err = JWTTokenSource(ctx, settings)
 	} else {
 		return nil, fmt.Errorf("Unsupported authentcation method: %s", settings.GetAuthType())
 	}
@@ -70,22 +65,9 @@ func OAuthJSONTokenSource(ctx context.Context, settings *Settings) (oauth2.Token
 		return nil, err
 	}
 	return creds.TokenSource, nil
-
 }
 
-func JWTTokenSource(ctx context.Context, settings *Settings) (oauth2.TokenSource, error) {
-	creds, err := FindJSONCredentials(ctx, settings)
-	if err != nil {
-		return nil, err
-	}
-	if settings.Audience != "" {
-		return google.JWTAccessTokenSourceFromJSON(creds.JSON, settings.Audience)
-	} else if settings.Scope != "" {
-		return google.JWTAccessTokenSourceWithScope(creds.JSON, settings.Scope)
-	} else {
-		return nil, errors.New("Neither audience nor scope is provided for JWTTokenSource")
-	}
-}
+
 
 // FindJSONCredentials obtains credentials from settings or Application Default Credentials
 func FindJSONCredentials(ctx context.Context, settings *Settings) (*google.Credentials, error) {

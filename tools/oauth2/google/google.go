@@ -15,8 +15,7 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"github.com/pigeatgarlic/oauth2l/tools/oauth2"
-	"github.com/pigeatgarlic/oauth2l/tools/oauth2/google/internal/externalaccount"
-	"github.com/pigeatgarlic/oauth2l/tools/oauth2/jwt"
+	// "github.com/pigeatgarlic/oauth2l/tools/oauth2/google/internal/externalaccount"
 )
 
 // Endpoint is Google's OAuth 2.0 default endpoint.
@@ -83,17 +82,17 @@ func ConfigFromJSON(authdata interface{}, jsonKey []byte, scope ...string) (*oau
 // the credentials that authorize and authenticate the requests.
 // Create a service account on "Credentials" for your project at
 // https://console.developers.google.com to download a JSON key file.
-func JWTConfigFromJSON(jsonKey []byte, scope ...string) (*jwt.Config, error) {
-	var f credentialsFile
-	if err := json.Unmarshal(jsonKey, &f); err != nil {
-		return nil, err
-	}
-	if f.Type != serviceAccountKey {
-		return nil, fmt.Errorf("google: read JWT from JSON credentials: 'type' field is %q (expected %q)", f.Type, serviceAccountKey)
-	}
-	scope = append([]string(nil), scope...) // copy
-	return f.jwtConfig(scope, ""), nil
-}
+// func JWTConfigFromJSON(jsonKey []byte, scope ...string) (*jwt.Config, error) {
+// 	var f credentialsFile
+// 	if err := json.Unmarshal(jsonKey, &f); err != nil {
+// 		return nil, err
+// 	}
+// 	if f.Type != serviceAccountKey {
+// 		return nil, fmt.Errorf("google: read JWT from JSON credentials: 'type' field is %q (expected %q)", f.Type, serviceAccountKey)
+// 	}
+// 	scope = append([]string(nil), scope...) // copy
+// 	return f.jwtConfig(scope, ""), nil
+// }
 
 // JSON key file types.
 const (
@@ -129,7 +128,7 @@ type credentialsFile struct {
 	TokenInfoURL                   string                           `json:"token_info_url"`
 	ServiceAccountImpersonationURL string                           `json:"service_account_impersonation_url"`
 	Delegates                      []string                         `json:"delegates"`
-	CredentialSource               externalaccount.CredentialSource `json:"credential_source"`
+	// CredentialSource               externalaccount.CredentialSource `json:"credential_source"`
 	QuotaProjectID                 string                           `json:"quota_project_id"`
 	WorkforcePoolUserProject       string                           `json:"workforce_pool_user_project"`
 
@@ -137,27 +136,24 @@ type credentialsFile struct {
 	SourceCredentials *credentialsFile `json:"source_credentials"`
 }
 
-func (f *credentialsFile) jwtConfig(scopes []string, subject string) *jwt.Config {
-	cfg := &jwt.Config{
-		Email:        f.ClientEmail,
-		PrivateKey:   []byte(f.PrivateKey),
-		PrivateKeyID: f.PrivateKeyID,
-		Scopes:       scopes,
-		TokenURL:     f.TokenURL,
-		Subject:      subject, // This is the user email to impersonate
-		Audience:     f.Audience,
-	}
-	if cfg.TokenURL == "" {
-		cfg.TokenURL = JWTTokenURL
-	}
-	return cfg
-}
+// func (f *credentialsFile) jwtConfig(scopes []string, subject string) *jwt.Config {
+// 	cfg := &jwt.Config{
+// 		Email:        f.ClientEmail,
+// 		PrivateKey:   []byte(f.PrivateKey),
+// 		PrivateKeyID: f.PrivateKeyID,
+// 		Scopes:       scopes,
+// 		TokenURL:     f.TokenURL,
+// 		Subject:      subject, // This is the user email to impersonate
+// 		Audience:     f.Audience,
+// 	}
+// 	if cfg.TokenURL == "" {
+// 		cfg.TokenURL = JWTTokenURL
+// 	}
+// 	return cfg
+// }
 
 func (f *credentialsFile) tokenSource(ctx context.Context, params CredentialsParams) (oauth2.TokenSource, error) {
 	switch f.Type {
-	case serviceAccountKey:
-		cfg := f.jwtConfig(params.Scopes, params.Subject)
-		return cfg.TokenSource(ctx), nil
 	case userCredentialsKey:
 		cfg := &oauth2.Config{
 			ClientID:    f.ClientID,
@@ -179,37 +175,6 @@ func (f *credentialsFile) tokenSource(ctx context.Context, params CredentialsPar
 		}
 		tok := &oauth2.Account{RefreshToken: f.RefreshToken}
 		return cfg.TokenSource(ctx, tok), nil
-	case externalAccountKey:
-		cfg := &externalaccount.Config{
-			Audience:                       f.Audience,
-			SubjectTokenType:               f.SubjectTokenType,
-			TokenURL:                       f.TokenURLExternal,
-			TokenInfoURL:                   f.TokenInfoURL,
-			ServiceAccountImpersonationURL: f.ServiceAccountImpersonationURL,
-			ClientID:                       f.ClientID,
-			CredentialSource:               f.CredentialSource,
-			QuotaProjectID:                 f.QuotaProjectID,
-			Scopes:                         params.Scopes,
-			WorkforcePoolUserProject:       f.WorkforcePoolUserProject,
-		}
-		return cfg.TokenSource(ctx)
-	case impersonatedServiceAccount:
-		if f.ServiceAccountImpersonationURL == "" || f.SourceCredentials == nil {
-			return nil, errors.New("missing 'source_credentials' field or 'service_account_impersonation_url' in credentials")
-		}
-
-		ts, err := f.SourceCredentials.tokenSource(ctx, params)
-		if err != nil {
-			return nil, err
-		}
-		imp := externalaccount.ImpersonateTokenSource{
-			Ctx:       ctx,
-			URL:       f.ServiceAccountImpersonationURL,
-			Scopes:    params.Scopes,
-			Ts:        ts,
-			Delegates: f.Delegates,
-		}
-		return oauth2.ReuseTokenSource(nil, imp), nil
 	case "":
 		return nil, errors.New("missing 'type' field in credentials")
 	default:
