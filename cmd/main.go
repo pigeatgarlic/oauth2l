@@ -15,8 +15,7 @@ func main() {
 		Hello: "adf",
 	})
 	if err != nil {
-		fmt.Printf("%s", err.Error())
-	} else {
-		fmt.Printf("Username: %s \nPassword: %s \n", token.Username, token.Password)
+		return 
 	}
+	fmt.Printf(token)
 }

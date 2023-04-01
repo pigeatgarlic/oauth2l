@@ -214,7 +214,7 @@ func getScopesWithFallback(scope string, remainingArgs ...string) []string {
 	return scopes
 }
 
-func StartAuth(authdata interface{}) (*oauth2.Account, error) {
+func StartAuth(authdata interface{}) (string, error) {
 	commonOpts := getCommonFetchOptions(opts, "fetch")
 
 	var authCodeServer AuthorizationCodeServer = nil
@@ -233,7 +233,7 @@ func StartAuth(authdata interface{}) (*oauth2.Account, error) {
 
 	// Start localhost server
 	_,err := authCodeServer.ListenAndServe("localhost:3000")
-	if err != nil { return nil, err }
+	if err != nil { return "", err }
 	defer authCodeServer.Close()
 
 
@@ -260,14 +260,12 @@ func StartAuth(authdata interface{}) (*oauth2.Account, error) {
 		pkce: GeneratePKCEParams(),
 	}
 
-	_,err = src.Token()
+	token,err := src.Token()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	return &oauth2.Account{
-
-	},nil
+	return token,nil
 }
 
 
@@ -317,7 +315,7 @@ type authHandlerSource struct {
 	pkce        *PKCEParams
 }
 
-func (source authHandlerSource) Token() (*oauth2.Account, error) {
+func (source authHandlerSource) Token() (string, error) {
 	// Step 1: Obtain auth code.
 	var authCodeUrlOptions []AuthCodeOption
 	if source.pkce != nil && source.pkce.Challenge != "" && source.pkce.ChallengeMethod != "" {
@@ -325,13 +323,13 @@ func (source authHandlerSource) Token() (*oauth2.Account, error) {
 			SetAuthURLParam(codeChallengeKey, source.pkce.Challenge),
 			SetAuthURLParam(codeChallengeMethodKey, source.pkce.ChallengeMethod)}
 	}
-	url := source.config.AuthCodeURL(source.state, authCodeUrlOptions...)
-	code, state, err := source.authHandler(url)
+	authurl := source.config.AuthCodeURL(source.state, authCodeUrlOptions...)
+	code, state, err := source.authHandler(authurl)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	if state != source.state {
-		return nil, errors.New("state mismatch in 3-legged-OAuth flow")
+		return "", errors.New("state mismatch in 3-legged-OAuth flow")
 	}
 
 	// Step 2: Exchange auth code for access token.
@@ -339,7 +337,21 @@ func (source authHandlerSource) Token() (*oauth2.Account, error) {
 	if source.pkce != nil && source.pkce.Verifier != "" {
 		exchangeOptions = []AuthCodeOption{SetAuthURLParam(codeVerifierKey, source.pkce.Verifier)}
 	}
-	return source.config.Exchange(source.ctx, source.config.Authdata, code, exchangeOptions...)
+
+
+
+	v := url.Values{
+		"grant_type": {"authorization_code"},
+		"code":       {code},
+	}
+	// if c.RedirectURL != "" {
+	// 	v.Set("redirect_uri", c.RedirectURL)
+	// }
+	for _, opt := range exchangeOptions {
+		opt.setValue(v)
+	}
+
+	return v.Encode(),nil
 }
 
 
