@@ -15,7 +15,7 @@
 //
 // loopback implements an authorization code localhost server that
 // handles 3LO loopback flows. (see AuthorizationCodeServer interface)
-package util
+package oauth2l
 
 import (
 	"fmt"

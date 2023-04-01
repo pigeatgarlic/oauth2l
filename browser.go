@@ -15,7 +15,7 @@
 //
 // browser implements helper functions to interact with the OS's default
 // internet browser. MacOs, Windows and Linux are the only supported OS.
-package util
+package oauth2l
 
 import (
 	"fmt"

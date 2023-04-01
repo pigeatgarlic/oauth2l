@@ -1,11 +1,10 @@
-//
 // Copyright 2019 Google Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,15 +14,19 @@
 package oauth2l
 
 import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/jessevdk/go-flags"
-	"github.com/pigeatgarlic/oauth2l/tools/oauth2"
-	"github.com/pigeatgarlic/oauth2l/util"
+	"github.com/google/uuid"
 )
 
 const (
@@ -142,29 +145,7 @@ func readJSON(file string) (string, error) {
 	return "", nil
 }
 
-// Append Google OAuth scope prefix if not provided and joins
-// the slice into a whitespace-separated string.
-func parseScopes(scopes []string) string {
-	for i := 0; i < len(scopes); i++ {
-		if !strings.Contains(scopes[i], "//") && !openIdScopes.MatchString(scopes[i]) {
-			scopes[i] = scopePrefix + scopes[i]
-		}
-	}
-	return strings.Join(scopes, " ")
-}
 
-// Overrides default cache location if configured.
-func setCacheLocation(cache *string) {
-	if cache != nil {
-	}
-}
-
-// Overrides default web directory if configured.
-func setWebDirectory(directory string) {
-	if directory != "" {
-		util.WebDirectory = directory
-	}
-}
 
 // Extracts the common fetch options based on chosen command.
 func getCommonFetchOptions(cmdOpts commandOptions, cmd string) commonFetchOptions {
@@ -234,101 +215,382 @@ func getScopesWithFallback(scope string, remainingArgs ...string) []string {
 }
 
 func StartAuth(authdata interface{}) (*oauth2.Account, error) {
-
-	parser := flags.NewParser(&opts, flags.Default)
-	util.CacheLocation = "./cache"
-	remainingArgs, _ := parser.ParseArgs([]string{"fetch", "--scope", "profile email openid", "--credentials", "./secret"})
 	commonOpts := getCommonFetchOptions(opts, "fetch")
-	authType := getAuthTypeWithFallback(commonOpts)
-	credentials := getCredentialsWithFallback(commonOpts)
 
-	scope := commonOpts.Scope
-	audience := commonOpts.Audience
-	quotaProject := commonOpts.QuotaProject
-	sts := commonOpts.Sts
-	serviceAccount := commonOpts.ServiceAccount
-	email := commonOpts.Email
-	ssocli := commonOpts.SsoCli
-	refresh := commonOpts.Refresh
-	format := getOutputFormatWithFallback(opts.Fetch)
-	curlcli := opts.Curl.CurlCli
-	url := opts.Curl.Url
-
-	taskSettings := &util.TaskSettings{
-		AuthType:  authType,
-		Format:    format,
-		CurlCli:   curlcli,
-		Url:       url,
-		ExtraArgs: remainingArgs,
-		SsoCli:    ssocli,
-		Refresh:   refresh,
-
-		Authdata: authdata,
+	var authCodeServer AuthorizationCodeServer = nil
+	var consentPageSettings ConsentPageSettings
+	interactionTimeout,_ := getTimeDuration(2, "minutes")
+	consentPageSettings = ConsentPageSettings{
+		DisableAutoOpenConsentPage: commonOpts.DisableAutoOpenConsentPage,
+		InteractionTimeout:         interactionTimeout,
+	}
+	authCodeServer = &AuthorizationCodeLocalhost{
+		ConsentPageSettings: consentPageSettings,
+		AuthCodeReqStatus: AuthorizationCodeStatus{
+			Status: WAITING, Details: "Authorization code not yet set."},
 	}
 
-	// Configure GUAC settings based on authType.
-	var settings *util.Settings
-	{
-		// OAuth flow
-		scopes := getScopesWithFallback(scope, remainingArgs...)
-		if len(scopes) < 1 {
-			return nil, fmt.Errorf("Missing scope argument for OAuth 2.0")
-		}
 
-		json, err := readJSON(credentials)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to open file: " + credentials)
-		}
+	// Start localhost server
+	_,err := authCodeServer.ListenAndServe("localhost:3000")
+	if err != nil { return nil, err }
+	defer authCodeServer.Close()
 
-		var authCodeServer util.AuthorizationCodeServer = nil
-		var consentPageSettings util.ConsentPageSettings
-		redirectUri, err := util.GetFirstRedirectURI(json)
-		// 3LO Loopback case
-		if err == nil && strings.Contains(redirectUri, "localhost") {
-			interactionTimeout, err := getTimeDuration(commonOpts.ConsentPageInteractionTimeout, commonOpts.ConsentPageInteractionTimeoutUnits)
-			if err != nil {
-				return nil, fmt.Errorf("Failed to create time.Duration: " + err.Error())
-			}
-			consentPageSettings = util.ConsentPageSettings{
-				DisableAutoOpenConsentPage: commonOpts.DisableAutoOpenConsentPage,
-				InteractionTimeout:         interactionTimeout,
-			}
-			authCodeServer = &util.AuthorizationCodeLocalhost{
-				ConsentPageSettings: consentPageSettings,
-				AuthCodeReqStatus: util.AuthorizationCodeStatus{
-					Status: util.WAITING, Details: "Authorization code not yet set."},
-			}
 
-			// Start localhost server
-			adr, err := authCodeServer.ListenAndServe(redirectUri)
-			if err != nil {
-				return nil, err
-			}
-			// Close localhost server's port on exit
-			defer authCodeServer.Close()
+	config := &Config{
+		ClientID:    "610452128706-s8auiqjknom5t225s2bn94dctpambeei.apps.googleusercontent.com",
 
-			// If a different dynamic redirect uri was created, replace the redirect uri in file.
-			// this happens if the original redirect does not have a port for the localhost.
-			redirectUri = fmt.Sprintf("\"%s\"", redirectUri)
-			adr = fmt.Sprintf("\"%s\"", adr)
-			json = strings.Replace(json, redirectUri, adr, -1)
-		}
+		ExchangeAPI: "",
+		AnonToken:   "",
 
-		// 3LO or 2LO depending on the credential type.
-		// For 2LO flow AuthHandler, State and ConsentPageSettings are not needed.
-		settings = &util.Settings{
-			CredentialsJSON: json,
-			Scope:           parseScopes(scopes),
-			AuthHandler:     util.Get3LOAuthorizationHandler(defaultState, consentPageSettings, &authCodeServer),
-			State:           defaultState,
-			Audience:        audience,
-			QuotaProject:    quotaProject,
-			Sts:             sts,
-			ServiceAccount:  serviceAccount,
-			Email:           email,
-			AuthType:        util.AuthTypeOAuth,
-		}
+		RedirectURL: "http://localhost:3000",
+		Scopes:      []string{"openid","email","profile"},
+
+		Endpoint: Endpoint{
+			AuthURL:  "https://accounts.google.com/o/oauth2/auth",
+			TokenURL: "https://oauth2.googleapis.com/token",
+		},
 	}
 
-	return util.Fetch(settings, taskSettings)
+	src := authHandlerSource{
+		config: config, 
+		ctx: context.Background(), 
+		authHandler: Get3LOAuthorizationHandler(defaultState, consentPageSettings, &authCodeServer), 
+		state: "state", 
+		pkce: GeneratePKCEParams(),
+	}
+
+	_,err = src.Token()
+	if err != nil {
+		return nil, err
+	}
+
+	return &oauth2.Account{
+
+	},nil
+}
+
+
+// CredentialsParams holds user supplied parameters that are used together
+// with a credentials file for building a Credentials object.
+type CredentialsParams struct {
+	// Scopes is the list OAuth scopes. Required.
+	// Example: https://www.googleapis.com/auth/cloud-platform
+	Scopes []string
+
+	// Subject is the user email used for domain wide delegation (see
+	// https://developers.google.com/identity/protocols/oauth2/service-account#delegatingauthority).
+	// Optional.
+	Subject string
+
+	// AuthHandler is the AuthorizationHandler used for 3-legged OAuth flow. Required for 3LO flow.
+	AuthHandler AuthorizationHandler
+
+	// State is a unique string used with AuthHandler. Required for 3LO flow.
+	State string
+
+	// PKCE is used to support PKCE flow. `Optional for 3LO flow.
+	PKCE *PKCEParams
+}
+
+// AuthorizationHandler is a 3-legged-OAuth helper that prompts
+// the user for OAuth consent at the specified auth code URL
+// and returns an auth code and state upon approval.
+type AuthorizationHandler func(authCodeURL string) (code string, state string, err error)
+
+
+const (
+	// Parameter keys for AuthCodeURL method to support PKCE.
+	codeChallengeKey       = "code_challenge"
+	codeChallengeMethodKey = "code_challenge_method"
+
+	// Parameter key for Exchange method to support PKCE.
+	codeVerifierKey = "code_verifier"
+)
+
+
+type authHandlerSource struct {
+	ctx         context.Context
+	config      *Config
+	authHandler AuthorizationHandler
+	state       string
+	pkce        *PKCEParams
+}
+
+func (source authHandlerSource) Token() (*oauth2.Account, error) {
+	// Step 1: Obtain auth code.
+	var authCodeUrlOptions []AuthCodeOption
+	if source.pkce != nil && source.pkce.Challenge != "" && source.pkce.ChallengeMethod != "" {
+		authCodeUrlOptions = []AuthCodeOption{
+			SetAuthURLParam(codeChallengeKey, source.pkce.Challenge),
+			SetAuthURLParam(codeChallengeMethodKey, source.pkce.ChallengeMethod)}
+	}
+	url := source.config.AuthCodeURL(source.state, authCodeUrlOptions...)
+	code, state, err := source.authHandler(url)
+	if err != nil {
+		return nil, err
+	}
+	if state != source.state {
+		return nil, errors.New("state mismatch in 3-legged-OAuth flow")
+	}
+
+	// Step 2: Exchange auth code for access token.
+	var exchangeOptions []AuthCodeOption
+	if source.pkce != nil && source.pkce.Verifier != "" {
+		exchangeOptions = []AuthCodeOption{SetAuthURLParam(codeVerifierKey, source.pkce.Verifier)}
+	}
+	return source.config.Exchange(source.ctx, source.config.Authdata, code, exchangeOptions...)
+}
+
+
+
+
+
+
+
+// PKCEParams holds parameters to support PKCE.
+type PKCEParams struct {
+	Challenge       string // The unpadded, base64-url-encoded string of the encrypted code verifier.
+	ChallengeMethod string // The encryption method (ex. S256).
+	Verifier        string // The original, non-encrypted secret.
+}
+
+// GeneratePKCEParams generates a unique PKCE challenge and verifier combination,
+// using UUID, SHA256 encryption, and base64 URL encoding with no padding.
+func GeneratePKCEParams() *PKCEParams {
+	verifier := uuid.New().String()
+	sha := sha256.Sum256([]byte(verifier))
+	challenge := base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(sha[:])
+
+	return &PKCEParams{
+		Challenge:       challenge,
+		ChallengeMethod: "S256",
+		Verifier:        verifier,
+	}
+}
+
+
+// 3LO authorization handler. Determines what algorithm to use
+// to get the authorization code.
+//
+// Note that the "state" parameter is used to prevent CSRF attacks.
+func Get3LOAuthorizationHandler(state string, consentSettings ConsentPageSettings,
+	authCodeServer *AuthorizationCodeServer) AuthorizationHandler {
+	return func(authCodeURL string) (string, string, error) {
+		decodedValue, _ := url.ParseQuery(authCodeURL)
+		redirectURL := decodedValue.Get("redirect_uri")
+
+		if strings.Contains(redirectURL, "localhost") {
+			return authorization3LOLoopback(authCodeURL, consentSettings, authCodeServer)
+		}
+
+		return authorization3LOOutOfBand(state, authCodeURL)
+	}
+}
+
+// authorization3LOOutOfBand prints the authorization URL on stdout
+// and reads the authorization code from stdin.
+//
+// Note that the "state" parameter is used to prevent CSRF attacks.
+// For convenience, authorization3LOOutOfBand returns a pre-configured state
+// instead of requiring the user to copy it from the browser.
+func authorization3LOOutOfBand(state string, authCodeURL string) (string, string, error) {
+	fmt.Printf("Go to the following link in your browser:\n\n   %s\n\n", authCodeURL)
+	fmt.Println("Enter authorization code:")
+	var code string
+	fmt.Scanln(&code)
+	return code, state, nil
+}
+
+
+// authorization3LOLoopback prints the authorization URL on stdout
+// and redirects the user to the authCodeURL in a new browser's tab.
+// if `DisableAutoOpenConsentPage` is set, then the user is instructed
+// to manually open the authCodeURL in a new browser's tab.
+//
+// The code and state output parameters in this function are the same
+// as the ones generated after the user grants permission on the consent page.
+// When the user interacts with the consent page, an error or a code-state-tuple
+// is expected to be returned to the Auth Code Localhost Server endpoint
+// (see loopback.go for more info).
+func authorization3LOLoopback(authCodeURL string, consentSettings ConsentPageSettings,
+	authCodeServer *AuthorizationCodeServer) (string, string, error) {
+	const (
+		// Max wait time for the server to start listening and serving
+		maxWaitForListenAndServe time.Duration = 10 * time.Second
+	)
+
+	// (Step 1) Start local Auth Code Server
+	if started, _ := (*authCodeServer).WaitForListeningAndServing(maxWaitForListenAndServe); started {
+		// (Step 2) Provide access to the consent page
+		if consentSettings.DisableAutoOpenConsentPage { // Auto open consent disabled
+			fmt.Println("Go to the following link in your browser:")
+			fmt.Println("\n", authCodeURL)
+		} else { // Auto open consent
+			b := Browser{}
+			if be := b.OpenURL(authCodeURL); be != nil {
+				fmt.Println("Your browser could not be opened to visit:")
+				fmt.Println("\n", authCodeURL)
+				fmt.Println("\nError:", be)
+			} else {
+				fmt.Println("Your browser has been opened to visit:")
+				fmt.Println("\n", authCodeURL)
+			}
+		}
+
+		// (Step 3) Wait for user to interact with consent page
+		(*authCodeServer).WaitForConsentPageToReturnControl()
+	}
+
+	// (Step 4) Attempt to get Authorization code. If one was not received
+	// default string values are returned.
+	code, err := (*authCodeServer).GetAuthenticationCode()
+	return code.Code, code.State, err
+}
+
+
+
+// Endpoint represents an OAuth 2.0 provider's authorization and token
+// endpoint URLs.
+type Endpoint struct {
+	AuthURL  string
+	TokenURL string
+
+	// AuthStyle optionally specifies how the endpoint wants the
+	// client ID & client secret sent. The zero value means to
+	// auto-detect.
+	AuthStyle AuthStyle
+}
+
+
+// AuthStyle represents how requests for tokens are authenticated
+// to the server.
+type AuthStyle int
+
+const (
+	// AuthStyleAutoDetect means to auto-detect which authentication
+	// style the provider wants by trying both ways and caching
+	// the successful way for the future.
+	AuthStyleAutoDetect AuthStyle = 0
+
+	// AuthStyleInParams sends the "client_id" and "client_secret"
+	// in the POST body as application/x-www-form-urlencoded parameters.
+	AuthStyleInParams AuthStyle = 1
+
+	// AuthStyleInHeader sends the client_id and client_password
+	// using HTTP Basic Authorization. This is an optional style
+	// described in the OAuth2 RFC 6749 section 2.3.1.
+	AuthStyleInHeader AuthStyle = 2
+)
+
+
+
+// Config describes a typical 3-legged OAuth2 flow, with both the
+// client application information and the server's endpoint URLs.
+// For the client credentials 2-legged OAuth2 flow, see the clientcredentials
+// package (https://github.com/pigeatgarlic/oauth2l/tools/oauth2/clientcredentials).
+type Config struct {
+	// ClientID is the application's ID.
+	ClientID string
+
+	// Endpoint contains the resource server's token endpoint
+	// URLs. These are constants specific to each server and are
+	// often available via site-specific packages, such as
+	// google.Endpoint or github.Endpoint.
+	Endpoint Endpoint
+
+	// RedirectURL is the URL to redirect users going through
+	// the OAuth flow, after the resource owner's URLs.
+	RedirectURL string
+
+	// Scope specifies optional requested permissions.
+	Scopes []string
+
+	ExchangeAPI string
+
+	AnonToken string
+
+	Authdata interface{}
+}
+
+
+
+// AuthCodeURL returns a URL to OAuth 2.0 provider's consent page
+// that asks for permissions for the required scopes explicitly.
+//
+// State is a token to protect the user from CSRF attacks. You must
+// always provide a non-empty string and validate that it matches the
+// the state query parameter on your redirect callback.
+// See http://tools.ietf.org/html/rfc6749#section-10.12 for more info.
+//
+// Opts may include AccessTypeOnline or AccessTypeOffline, as well
+// as ApprovalForce.
+// It can also be used to pass the PKCE challenge.
+// See https://www.oauth.com/oauth2-servers/pkce/ for more info.
+func (c *Config) AuthCodeURL(state string, opts ...AuthCodeOption) string {
+	var buf bytes.Buffer
+	buf.WriteString(c.Endpoint.AuthURL)
+	v := url.Values{
+		"response_type": {"code"},
+		"client_id":     {c.ClientID},
+	}
+	if c.RedirectURL != "" {
+		v.Set("redirect_uri", c.RedirectURL)
+	}
+	if len(c.Scopes) > 0 {
+		v.Set("scope", strings.Join(c.Scopes, " "))
+	}
+	if state != "" {
+		// TODO(light): Docs say never to omit state; don't allow empty.
+		v.Set("state", state)
+	}
+	for _, opt := range opts {
+		opt.setValue(v)
+	}
+	if strings.Contains(c.Endpoint.AuthURL, "?") {
+		buf.WriteByte('&')
+	} else {
+		buf.WriteByte('?')
+	}
+	buf.WriteString(v.Encode())
+	return buf.String()
+}
+
+
+
+
+type setParam struct{ k, v string }
+func (p setParam) setValue(m url.Values) { m.Set(p.k, p.v) }
+
+var (
+	// AccessTypeOnline and AccessTypeOffline are options passed
+	// to the Options.AuthCodeURL method. They modify the
+	// "access_type" field that gets sent in the URL returned by
+	// AuthCodeURL.
+	//
+	// Online is the default if neither is specified. If your
+	// application needs to refresh access tokens when the user
+	// is not present at the browser, then use offline. This will
+	// result in your application obtaining a refresh token the
+	// first time your application exchanges an authorization
+	// code for a user.
+	AccessTypeOnline  AuthCodeOption = SetAuthURLParam("access_type", "online")
+	AccessTypeOffline AuthCodeOption = SetAuthURLParam("access_type", "offline")
+
+	// ApprovalForce forces the users to view the consent dialog
+	// and confirm the permissions request at the URL returned
+	// from AuthCodeURL, even if they've already done so.
+	ApprovalForce AuthCodeOption = SetAuthURLParam("prompt", "consent")
+)
+
+// An AuthCodeOption is passed to Config.AuthCodeURL.
+type AuthCodeOption interface {
+	setValue(url.Values)
+}
+
+
+// SetAuthURLParam builds an AuthCodeOption which passes key/value parameters
+// to a provider's authorization endpoint.
+func SetAuthURLParam(key, value string) AuthCodeOption {
+	return setParam{key, value}
 }
