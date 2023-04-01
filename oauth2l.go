@@ -20,7 +20,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"regexp"
 	"strings"
@@ -133,18 +132,6 @@ type webOptions struct {
 	Directory string `long:"directory" description:"Sets the directory of where OAuth2l-web should be located. Defaults to ~/.oauth2l-web." `
 }
 
-// Reads and returns content of JSON file.
-func readJSON(file string) (string, error) {
-	if file != "" {
-		secretBytes, err := ioutil.ReadFile(file)
-		if err != nil {
-			return "", err
-		}
-		return string(secretBytes), nil
-	}
-	return "", nil
-}
-
 
 
 // Extracts the common fetch options based on chosen command.
@@ -173,48 +160,8 @@ func getTimeDuration(quantity int, units string) (time.Duration, error) {
 	}
 }
 
-// Get the authentication type, with backward compatibility.
-func getAuthTypeWithFallback(commonOpts commonFetchOptions) string {
-	authType := commonOpts.AuthType
-	if commonOpts.Jwt {
-		authType = "jwt"
-	} else if commonOpts.Sso {
-		authType = "sso"
-	}
-	return authType
-}
 
-// Get the credentials file, with backward compatibility.
-func getCredentialsWithFallback(commonOpts commonFetchOptions) string {
-	credentials := commonOpts.Credentials
-	if commonOpts.Json != "" {
-		credentials = commonOpts.Json
-	}
-	return credentials
-}
-
-// Get the fetch output format, with backward compatibility.
-func getOutputFormatWithFallback(fetchOpts fetchOptions) string {
-	format := fetchOpts.Format
-	if fetchOpts.OldFormat != "" {
-		format = fetchOpts.OldFormat
-	}
-	return format
-}
-
-// Converts scope argument to string slice, with backward compatibility.
-func getScopesWithFallback(scope string, remainingArgs ...string) []string {
-	var scopes []string
-	// Fallback to reading scope from remaining args
-	if scope == "" {
-		scopes = remainingArgs
-	} else {
-		scopes = scopeDelimiter.Split(scope, -1)
-	}
-	return scopes
-}
-
-func StartAuth(authdata interface{}) (string, error) {
+func StartAuth(clientID string, redirectPort int) (string, error) {
 	commonOpts := getCommonFetchOptions(opts, "fetch")
 
 	var authCodeServer AuthorizationCodeServer = nil
@@ -232,31 +179,25 @@ func StartAuth(authdata interface{}) (string, error) {
 
 
 	// Start localhost server
-	_,err := authCodeServer.ListenAndServe("localhost:3000")
+	_,err := authCodeServer.ListenAndServe(fmt.Sprintf("localhost:%d",redirectPort))
 	if err != nil { return "", err }
 	defer authCodeServer.Close()
 
-
-	config := &Config{
-		ClientID:    "610452128706-s8auiqjknom5t225s2bn94dctpambeei.apps.googleusercontent.com",
-
-		ExchangeAPI: "",
-		AnonToken:   "",
-
-		RedirectURL: "http://localhost:3000",
-		Scopes:      []string{"openid","email","profile"},
-
-		Endpoint: Endpoint{
-			AuthURL:  "https://accounts.google.com/o/oauth2/auth",
-			TokenURL: "https://oauth2.googleapis.com/token",
-		},
-	}
-
 	src := authHandlerSource{
-		config: config, 
+		config: &Config{
+			ClientID:    clientID,
+
+
+			Scopes:      []string{"openid","email","profile"},
+			RedirectURL: fmt.Sprintf("http://localhost:%d",redirectPort),
+			Endpoint: Endpoint{
+				AuthURL:  "https://accounts.google.com/o/oauth2/auth",
+				TokenURL: "https://oauth2.googleapis.com/token",
+			},
+		} , 
+		state: "state", 
 		ctx: context.Background(), 
 		authHandler: Get3LOAuthorizationHandler(defaultState, consentPageSettings, &authCodeServer), 
-		state: "state", 
 		pkce: GeneratePKCEParams(),
 	}
 
@@ -341,12 +282,11 @@ func (source authHandlerSource) Token() (string, error) {
 
 
 	v := url.Values{
+		"redirect_uri": {source.config.RedirectURL},
 		"grant_type": {"authorization_code"},
 		"code":       {code},
 	}
-	// if c.RedirectURL != "" {
-	// 	v.Set("redirect_uri", c.RedirectURL)
-	// }
+
 	for _, opt := range exchangeOptions {
 		opt.setValue(v)
 	}
@@ -517,12 +457,6 @@ type Config struct {
 
 	// Scope specifies optional requested permissions.
 	Scopes []string
-
-	ExchangeAPI string
-
-	AnonToken string
-
-	Authdata interface{}
 }
 
 
